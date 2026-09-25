@@ -30,7 +30,7 @@
 | ARCH-012 | `src/OpenCATS` PSR-4 layer is a thin, partially broken veneer (2 call sites; broken exception classes) | MEDIUM |
 | ARCH-013 | Multi-tenancy is vestigial: `site_id` everywhere, but public portals hard-wired to the first site and attachment download bypasses the tenant filter | MEDIUM |
 | ARCH-014 | Configuration is mutable PHP source with hard-coded defaults/secrets, rewritten at runtime from request data; no env support; config drift | HIGH |
-| ARCH-015 | Module discovery (dir scan + include + instantiate 23 modules + DB lock + 24 schema SELECTs) runs on every new session; update detection depends on `.svn/entries` | MEDIUM |
+| ARCH-015 | Module discovery (dir scan + include + instantiate 23 modules + DB lock + 23 `module_schema` SELECTs) runs on every new session; update detection depends on `.svn/entries` | MEDIUM |
 | ARCH-016 | Background processing depends on an unprovisioned cron that calls a web-reachable `QueueCLI.php`; duplicated/inconsistent task framework | MEDIUM |
 | ARCH-017 | Search is REGEXP/LIKE table scans (no FULLTEXT index); optional Sphinx is a 2007-era API plus a forked `Search.php` | MEDIUM |
 | ARCH-018 | File storage inside the web root with 0777 dirs, Apache-only protection, `exec()`-based converters; ODT extraction broken | MEDIUM |
@@ -317,7 +317,7 @@ docker/docker-compose.yml (dev)                    docker/docker-compose-test.ym
   - The repo is bind-mounted as the docroot (`:22`), so everything in the repo (`db/*.sql`, `test/`, `composer.lock`, `.git` if present) is under the web root. Whether nginx blocks these is UNKNOWN.
 - **Install flow.** Browsing to `index.php` without `INSTALL_BLOCK` shows `notinstalled.php` → `installwizard.php` → `ajax.php?f=install:ui` steps: system check, DB connectivity (writes `config.php`), load schema/demo data, resume indexing paths, mail, optional components (via `eval` of `installCode`, `ui.php:544-551,1162`), then `maint` (module schema processing via `modules/install/ajax/maint.php` → `index.php` with `$maintPage`, `ModuleUtility.php:517-536`), and finally creates `INSTALL_BLOCK` (`ui.php:970-975`). `INSTALL_BLOCK` is git-ignored (`.gitignore:1`) and excluded from Travis packages (`ci/package-code.sh:6-7`).
 - **Release packaging.**
-  - GitHub Actions: `release` job (`.github/workflows/ci.yml:106-128`) runs only on `v*` tags after `tests`, and zips the checkout **without running `composer install`** (`:117-119`). `vendor/` is git-ignored (`.gitignore:9,14`). Also, `-x "*.git*"` excludes every path containing `.git`, including `.gitignore`.
+  - GitHub Actions: `release` job (`.github/workflows/ci.yml:106-128`) runs only on `v*` tags after `tests`, and zips the checkout **without running `composer install`** (`:117-119`). `vendor/` is git-ignored (`.gitignore:7,13`). Also, `-x "*.git*"` excludes every path containing `.git`, including `.gitignore`.
   - Legacy Travis: `ci/package-code.sh:3` runs `composer install --no-dev` before tar/zip (`:6-7`); `.travis.yml` tests PHP 7.2/8.0/8.2 (`:17-20`) and deploys with an encrypted key (`:28-38`). Its presence alongside GitHub Actions means two release paths exist (INFERENCE: Travis is no longer active).
 - **CI.** Matrix `php-version: ['7.2']` (`ci.yml:21`); lint only `src/` (`:44`); `composer audit || true` (`:48`); PHPUnit unit tests, then Docker-based integration and Behat (`:53-81`); the test report does not fail the build (`fail_on_failure: false`, `:92`).
 
@@ -380,7 +380,7 @@ Runtime incompatibilities found by grep (FACT: code present; effect per PHP chan
 - **Severity:** HIGH
 - **Finding:** The GitHub release job zips the checkout without running `composer install`, but five runtime files unconditionally include `./vendor/autoload.php`, and CKEditor is served from `vendor/`. CI lint covers 24 of 491 PHP/TPL files.
 - **Evidence:**
-  - `.github/workflows/ci.yml:117-119` (`zip -r opencats-${{ github.ref_name }}.zip . -x ...`, with no composer step in the `release` job) and `.gitignore:9,14` (`vendor/*`, `/vendor/`).
+  - `.github/workflows/ci.yml:117-119` (`zip -r opencats-${{ github.ref_name }}.zip . -x ...`, with no composer step in the `release` job) and `.gitignore:7,13` (`vendor/*`, `/vendor/`).
   - Consumers: `lib/TemplateUtility.php:38`, `lib/Companies.php:2`, `lib/JobOrders.php:2`, `lib/Mailer.php:43` (`require`, fatal if missing), `modules/candidates/Show.tpl:2`; `modules/joborders/Add.tpl:2` loads `vendor/ckeditor/...`.
   - Lint step: `ci.yml:44` `find src -name "*.php" ... php -l`.
 - **Impact:** INFERENCE: a user installing from a GitHub release zip gets a fatal `require` error in `Mailer.php` / missing classes unless they run Composer themselves, which the product does not document in-repo. PHP-version regressions in `lib/` and `modules/` pass CI.
@@ -589,7 +589,7 @@ Runtime incompatibilities found by grep (FACT: code present; effect per PHP chan
   - License checks all return `true` (`lib/License.php:580-591,658-669`).
   - `TemplateUtility::printFooter` may rewrite `LICENSE_KEY` (`:842-848`).
   - Firefox toolbar API (`modules/toolbar/ToolbarUI.php`).
-  - Phone-home to `www.catsone.com:80` sending site name, license key, user agent and active user count (`lib/NewVersionCheck.php:109-122,198-224`; disabled by the default seed `disable_version_check=1`, `db/cats_schema.sql:1044`, but enabled (`0`) by default in `test/data/test.sql:1526`).
+  - Phone-home to `www.catsone.com:80` sending site name, license key, user agent and active user count (`lib/NewVersionCheck.php:109-122,198-224`; disabled by the seeded `system` row `disable_version_check=1` in both `db/cats_schema.sql:1044` and `test/data/test.sql:1537`; the column default is `0` (`db/cats_schema.sql:1038`), so it is enabled wherever that row is missing).
   - SOAP parsing via resfly.com (`wsdl/*.wsdl`, `lib/ParseUtility.php`).
   - 222 unimplemented hook points.
   - Unused lib files: `ControlPanel.php` (1,573), `Profile.php` (1,219), `CBFUtility.php` (715), `Display.php` (233), `DefaultQuestionnaires.php` (206), `JavaScriptCompressor.php` (121), `Encryption.php` (114, mcrypt).

@@ -86,13 +86,13 @@ Columns: **Entry** = `m=`/`a=` and `file:line` of the `case`; **Access** = the c
 | Feature | What it really does | Entry | Backing lib | Tables | Access | Maturity notes | Disp. |
 |---|---|---|---|---|---|---|---|
 | Dashboard | Renders 6 widgets: My Recent Calls, My Upcoming Calls, My Upcoming Events, Recent Hires, Hiring Overview graph, Important Candidates grid | `m=home` (`HomeUI.php:83-86`, `home()` 91-135) | `Dashboard`, `Calendar`, `DataGrid` | see below | AUTH | Also calls `NewVersionCheck::getNews()` (`HomeUI.php:95`) which phones home daily (see FEAT-012) and discards the return value | REDESIGN |
-| "My Recent Calls" | Misnamed: last 6 activities of **any** type entered by the current user on candidates/contacts in the last month | `home:CallsDataGrid` (`modules/home/dataGrids.php:201`, SQL `:329-360`, `LIMIT 6`) | `DataGrid` | activity, candidate, contact, joborder, company | AUTH | Label does not match query | REDESIGN |
+| "My Recent Calls" | Misnamed: last 6 activities of **any** type entered by the current user on candidates/contacts in the last month | `home:CallsDataGrid` (`modules/home/dataGrids.php:201`, SQL `:281-395`, `LIMIT 6` at `:393`) | `DataGrid` | activity, candidate, contact, joborder, company | AUTH | Label does not match query | REDESIGN |
 | My Upcoming Events / Calls | Today + upcoming events entered by the user; "Calls" = event type 100, "Events" = all other types | `Calendar::getUpcomingEventsHTML()` (`lib/Calendar.php:641-661`, filter `:697-712`) | `Calendar` | calendar_event, calendar_event_type, user | AUTH | Returns pre-rendered HTML from the lib layer | REDESIGN |
 | Recent Hires | Last 10 `status_to = 800` history rows | `Dashboard::getPlacements()` (`lib/Dashboard.php:57-97`, literal `800` at `:85`) | `Dashboard` | candidate_joborder_status_history, candidate, joborder, company, user | AUTH | Hard-coded status literal; erased if pipeline removed (FEAT-003) | REDESIGN |
 | Hiring Overview graph | Weekly/monthly/yearly bar chart of submissions/interviews/hires from status history | `<img src=m=graphs&a=miniPlacementStatistics>` (`Home.tpl:66`); `GraphsUI.php:405-463`, `Dashboard::getPipelineData()` | `Dashboard`, artichow | candidate_joborder_status_history | AUTH (graph action requires login, `GraphsUI.php:101`) | Server-side JPEG via 2006-era artichow | REPLACE (client-side charting over an analytics API) |
 | Important Candidates | Pipelines in status 400/500/600 on job orders in the "Open" status group | `home:ImportantPipelineDashboard` (`modules/home/dataGrids.php:40`, WHERE `:163-172`) | `DataGrid`, `JobOrderStatuses::getOpenStatusSQL()` | candidate_joborder, candidate, joborder, candidate_joborder_status, user | AUTH | Useful "my hot pipeline" view but not user-scoped | REDESIGN |
-| Quick search ("search everything") | LIKE search over candidates (name/email/phone), companies (name/phone/url), contacts (name/phone/company/email), job orders (title/company) | `a=quickSearch` (`HomeUI.php:56`), `SearchEverything.tpl` | `QuickSearch` (`lib/Search.php:1306-1618`) | candidate, company, contact, joborder | AUTH | Lists search commented out (`HomeUI.php:204`); unindexed `%LIKE%` | REPLACE (search index) |
-| Saved / recent searches | Pin or remove a recent search (per user) | `a=addSavedSearch` (`HomeUI.php:69`), `a=deleteSavedSearch` (`:63`) | `SavedSearches` (`lib/Search.php:1620+`) | saved_search | AUTH (scoped by user_id/site_id `lib/Search.php:1645-1652`) | Redirects to caller-supplied `currentURL` | REDESIGN |
+| Quick search ("search everything") | LIKE search over candidates (name/email/phone), companies (name/phone/url), contacts (name/phone/company/email), job orders (title/company) | `a=quickSearch` (`HomeUI.php:56`), `SearchEverything.tpl` | `QuickSearch` (`lib/Search.php:1306-1618`) | candidate, company, contact, joborder | AUTH | Lists search commented out (`HomeUI.php:209`); unindexed `%LIKE%` | REPLACE (search index) |
+| Saved / recent searches | Pin or remove a recent search (per user) | `a=addSavedSearch` (`HomeUI.php:69`), `a=deleteSavedSearch` (`:63`) | `SavedSearches` (`lib/Search.php:1620+`) | saved_search | AUTH (scoped by user_id/site_id `lib/Search.php:1642-1655`) | Redirects to caller-supplied `currentURL` | REDESIGN |
 
 ### 2.2 Candidates (`modules/candidates`)
 
@@ -101,7 +101,7 @@ Columns: **Entry** = `m=`/`a=` and `file:line` of the `case`; **Access** = the c
 | Candidate list (datagrid) | Paged, sortable, column-configurable grid; filters "Only My", "Only Hot", tag filter; action area: Add To List, Add To Job Order, Send E-Mail (SA + mailer on), Export; duplicate warning icon | `a=listByView` (`CandidatesUI.php:360-368`) → `Candidates.tpl`; grid `modules/candidates/dataGrids.php:8,56-67` | `CandidatesDataGrid` (`lib/Candidates.php:1926`), `DataGrid` | candidate, candidate_joborder, candidate_duplicates, candidate_tag, tag, attachment, user, saved_list_entry | `candidates.list` ≥ READ (`:362`) | Core feature; grid state stored in session | REDESIGN |
 | Add candidate | Form incl. EEO fields, source picker, extra fields, optional pre-attached resume / text; on save runs duplicate check and links duplicates; optional "parse resume" | `a=add` (`:96-110`), `_addCandidate()` (`:2543-2725`) | `Candidates::add()` (`lib/Candidates.php:94`), `checkDuplicity()` | candidate, candidate_duplicates, attachment, extra_field, history | `candidates.add` ≥ EDIT (`:97`) | Live e-mail duplicate lookup via AJAX (`js/candidate.js:33`); `Add.tpl:514-520` calls `checkEmailAlreadyInSystem` for *phone* fields (bug) | REDESIGN |
 | Edit candidate | Update all fields, owner change sends "ownership assigned" e-mail (`EMAIL_TEMPLATE_OWNERSHIPASSIGNCANDIDATE`, `CandidatesUI.php:1126-1128,1264-1266`); field-level history captured | `a=edit` (`:112-126`) | `Candidates::update()` (`lib/Candidates.php:249-361`, history `:327-334`, mail `:345`) | candidate, history, extra_field, email_history | `candidates.edit` ≥ EDIT (`:113`) | – | REDESIGN |
-| Show candidate | Detail page: data, EEO block (if enabled and user `can_see_eeo_info`), attachments with preview, pipelines with star rating, activities, upcoming events, extra fields, lists, tags, questionnaires, duplicate banner with merge/remove actions, history link | `a=show` (`:88-94`, `show()` `:458-750`) | `Candidates`, `Pipelines`, `ActivityEntries`, `Attachments`, `Questionnaire`, `Tags` | candidate, attachment, candidate_joborder, activity, calendar_event, extra_field, saved_list*, candidate_tag, career_portal_questionnaire_history, candidate_duplicates, mru | `candidates.show` ≥ READ (`:89`); admin-hidden rows need MULTI_SA (`:497`) | Can also resolve `?email=` to an ID (`:475-481`) | REDESIGN |
+| Show candidate | Detail page: data, EEO block (if enabled and user `can_see_eeo_info`), attachments with preview, pipelines with star rating, activities, upcoming events, extra fields, lists, tags, questionnaires, duplicate banner with merge/remove actions, history link | `a=show` (`:88-94`, `show()` `:458-750`) | `Candidates`, `Pipelines`, `ActivityEntries`, `Attachments`, `Questionnaire`, `Tags` | candidate, attachment, candidate_joborder, activity, calendar_event, extra_field, saved_list*, candidate_tag, career_portal_questionnaire_history, candidate_duplicates, mru | `candidates.show` ≥ READ (`:89`); admin-hidden rows need MULTI_SA (`:496`) | Can also resolve `?email=` to an ID (`:478-485`) | REDESIGN |
 | Delete candidate | Hard delete + pipelines + status history + saved-list entries + duplicates + attachments + extra fields | `a=delete` (`:128-134`) | `Candidates::delete()` (`lib/Candidates.php:363-456`, history delete `:394-397`) | candidate, candidate_joborder, candidate_joborder_status_history, saved_list_entry, candidate_duplicates, attachment, extra_field, history | `candidates.delete` ≥ DELETE (`:129`) | Activities and calendar events are **not** deleted (orphans); erases placement stats (FEAT-003) | REDESIGN (soft delete + retention) |
 | Search | Modes: full name (`:1981`), key skills (`:2012`), resume full text (`:2044`, boolean REGEXP or Sphinx), city (`:2111`), phone (`:2142`) | `a=search` (`:136-152`) | `SearchCandidates` (`lib/Search.php:364-722`), `SearchByResumePager` (`:1843`), `DatabaseSearch` | candidate, attachment, saved_search | `candidates.search` ≥ READ (`:137`) | Sphinx optional (`ENABLE_SPHINX=false`, `config.php:97`) | REPLACE (search engine) |
 | Hot candidates | `is_hot` flag, bold styling, "Only Hot" filter | edit form + grid filter (`Candidates.tpl:38`) | – | candidate.is_hot | EDIT to set | Cosmetic flag | KEEP |
@@ -115,7 +115,7 @@ Columns: **Entry** = `m=`/`a=` and `file:line` of the `case`; **Access** = the c
 | Remove from pipeline | Deletes pipeline row **and all its status history** | `a=removeFromPipeline` (`:224-230`) | `Pipelines::remove()` (`lib/Pipelines.php:139-189`) | candidate_joborder, candidate_joborder_status_history, history | `pipelines.removeFromPipeline` ≥ DELETE (`:225`) | Openings not restored if candidate was Placed | REDESIGN |
 | E-mail candidates (bulk) | From grid selection: free-text or custom template; per-recipient `%CAND…%` substitution; sent synchronously | `a=emailCandidates` (`:297-307`, `onEmailCandidates()` `:3305-3417`) | `Mailer` (instantiated with `CATS_ADMIN_SITE`, `:3320`), `EmailTemplates::getAllCustom()` | candidate, email_template, email_history | ≥ READ then ≥ **SA** (`:298-305`) | Recipient lookup `WHERE candidate_id IN (...)` without site_id (`:3398-3403`); see FEAT-013 | REPLACE (campaign/communications service) |
 | Questionnaire view | Shows answers the candidate gave on the careers portal + resume text; printable | `a=show_questionnaire` (`:309-315`, `:3419-3454`) | `Questionnaire::getCandidateQuestionnaire()` | career_portal_questionnaire_history, attachment | ≥ READ (`:310`) | Keyed by questionnaire *title* from GET | REDESIGN |
-| EEO info | Gender/ethnicity/veteran/disability captured on add/edit/careers; shown only if EEO tracking enabled per category and user flag `can_see_eeo_info` | `show()` `:703-727`; `Show.tpl:260,278` | `EEOSettings` (`lib/Candidates.php:2367+`) | candidate.eeo_*, eeo_ethnic_type, eeo_veteran_type, settings | per-user flag (`lib/Session.php:814`) | US-specific categories | REDESIGN (configurable, jurisdiction-aware diversity data) |
+| EEO info | Gender/ethnicity/veteran/disability captured on add/edit/careers; shown only if EEO tracking enabled per category and user flag `can_see_eeo_info` | `show()` `:686-712`; `Show.tpl:260,278` | `EEOSettings` (`lib/Candidates.php:2367+`) | candidate.eeo_*, eeo_ethnic_type, eeo_veteran_type, settings | per-user flag (`lib/Session.php:814`) | US-specific categories | REDESIGN (configurable, jurisdiction-aware diversity data) |
 | Source tracking | Free-text `candidate.source` + per-site pick list editable inline | add/edit forms; `Candidates::getPossibleSources()/updatePossibleSources()` (`lib/Candidates.php:989-1115`) | `ListEditor` | candidate.source, candidate_source | EDIT | No source analytics anywhere (`grep -c source lib/Statistics.php` → 0) | REDESIGN |
 | Extra fields | EAV custom fields (text, textarea, checkbox, date, dropdown, radio, `constants.php:133-138`) shown on add/edit/show/grid | `ExtraFields` (`lib/ExtraFields.php`) | – | extra_field, extra_field_settings | as parent form | No required/validation flags | REDESIGN |
 | Duplicates: auto-detect on add | Flags new record as possible duplicate of existing ones (exact first+last name AND (middle name, or any phone, or any e-mail, or city+address)) | `_addCandidate()` `:2663,2704` | `Candidates::checkDuplicity()` (`lib/Candidates.php:1136-1210`) | candidate, candidate_duplicates | via add | Not site-scoped; manual add only (FEAT-007) | REDESIGN |
@@ -125,7 +125,7 @@ Columns: **Entry** = `m=`/`a=` and `file:line` of the `case`; **Access** = the c
 | Duplicates list page | `Duplicates.tpl` exists (datagrid of duplicates) but no action renders it and `totalDuplicates` is never assigned | – | `getDuplicatesCount()` unused | – | – | Orphan | RETIRE (rebuild as part of dedupe queue) |
 | Administrative hide/show | ROOT/ASP operator can hide a candidate from site users | `a=administrativeHideShow` (`:269-275`) | `Candidates::administrativeHideShow()` (`:1117`) | candidate.is_admin_hidden | `candidates.hidden` ≥ MULTI_SA | Multi-tenant ASP remnant | RETIRE (or fold into retention/legal-hold) |
 | Saved lists from candidate | Add to static list (quick action / grid) | see Lists (2.9) | – | – | – | `a=savedLists` commented: `// FIXME: function savedList() missing` (`:287`) | – |
-| MRU | Viewing a record adds it to the user's 5-item most-recently-used bar | `show()` `:680-683` | `MRU` (`lib/MRU.php`) | mru | AUTH | `MRU_MAX_ITEMS=5` (`config.php:121`) | KEEP |
+| MRU | Viewing a record adds it to the user's 5-item most-recently-used bar | `show()` `:672-674` | `MRU` (`lib/MRU.php`) | mru | AUTH | `MRU_MAX_ITEMS=5` (`config.php:121`) | KEEP |
 | Upcoming events | Candidate-linked future events on Show | `Candidates::getUpcomingEvents()` (`:975`) | `Calendar::getUpcomingEventsByDataItem()` | calendar_event | READ | – | KEEP |
 | Hot lists | `HotList.tpl` references `candidates.manageHotLists`; no handler | – | – | – | – | Orphan (superseded by saved lists) | RETIRE |
 
@@ -160,10 +160,10 @@ Columns: **Entry** = `m=`/`a=` and `file:line` of the `case`; **Access** = the c
 
 | Feature | What it really does | Entry | Tables | Access | Notes | Disp. |
 |---|---|---|---|---|---|---|
-| Status list | Read from `candidate_joborder_status` (`is_enabled=1`), picker excludes 0 | `getStatuses()` `:382-401`, `getStatusesForPicking()` `:404-424` | candidate_joborder_status (seed `db/cats_schema.sql:267-277`) | – | No admin UI to rename/enable/add; codes duplicated as PHP constants (`constants.php:120-130`) and literals (`lib/Statistics.php:102,133,241,312,351,422,559,591`; `lib/Dashboard.php:85`; `lib/Pipelines.php:110`) | REDESIGN |
+| Status list | Read from `candidate_joborder_status` (`is_enabled=1`), picker excludes 0 | `getStatuses()` `:382-401`, `getStatusesForPicking()` `:404-424` (excludes 0 at `:417`) | candidate_joborder_status (seed `db/cats_schema.sql:267-277`) | – | No admin UI to rename/enable/add; codes duplicated as PHP constants (`constants.php:120-130`) and literals (`lib/Statistics.php:102,133,241,312,351,422,559,591`; `lib/Dashboard.php:85`; `lib/Pipelines.php:110`) | REDESIGN |
 | Status change | UPDATE status, insert history row (from→to), audit row, optional e-mail | `setStatus()` `:294-379` | candidate_joborder, candidate_joborder_status_history, history, email_history | via callers (EDIT) | No transition validation; e-mail subject is a config constant (`:370-374`, `config.php:166`) | REDESIGN |
 | Ratings | 0..5 stars per pipeline row; −1 = unscreened | `updateRatingValue()` `:648`, `ajax/setCandidateJobOrderRating.php` | candidate_joborder.rating_value | `pipelines.editRating` ≥ EDIT | Single rating, no rater, no criteria | REPLACE (structured scorecards) |
-| Submission/placement counting | Submission = any history row `status_to=400`; placement = `status_to=800` | `lib/Statistics.php:90-149`; pipeline "submitted" flag `lib/Pipelines.php:592-607` | candidate_joborder_status_history | – | FEAT-008 | REDESIGN |
+| Submission/placement counting | Submission = any history row `status_to=400`; placement = `status_to=800` | `lib/Statistics.php:90-149`; pipeline "submitted" flag `lib/Pipelines.php:594-607` | candidate_joborder_status_history | – | FEAT-008 | REDESIGN |
 | Pipeline details | Per-pipeline activity/history popup | `ajax/getPipelineDetails.php`, `getPipelineDetails()` `:697` | activity, candidate_joborder | AUTH (SecureAJAXInterface) | – | REDESIGN |
 
 ### 2.5 Activities (`modules/activity`)
@@ -182,7 +182,7 @@ Columns: **Entry** = `m=`/`a=` and `file:line` of the `case`; **Access** = the c
 | Calendar view (day/week/month) + "Goto Today", "My Upcoming Events" | JS calendar fed by `dynamicData` string of all site events for the month | `a=showCalendar` (`CalendarUI.php:83-86`), `a=dynamicData` (`:75-77`, `:305-341`) | `Calendar::getEventArray()` (`lib/Calendar.php:83-150`), `makeEventString()` | calendar_event, calendar_event_type, user | AUTH (tab `*al=READ` is cosmetic, `:44`) | Private events leaked (FEAT-004) | REPLACE (calendar sync) |
 | Add / edit / delete event | Type (Call, Email, Meeting, Interview, Personal, Other — `db/cats_schema.sql:151-156`), date/time or all-day, duration, public flag, regarding data item + job order, reminder (e-mail address + minutes before) | `a=addEvent` (`:61`), `a=editEvent` (`:68`), `a=deleteEvent` (`:79`) | `Calendar::addEvent/updateEvent/deleteEvent` (`:297,392,471`) | calendar_event | add ≥ EDIT (`:345`), edit ≥ EDIT (`:504`), delete ≥ DELETE (`:689`) | Single owner; no attendees/invites/ICS | REPLACE |
 | Show other users' entries | SA toggle "Show Entries from Other Users" | `Calendar.tpl:16-21`, `CalendarUI.php:173` | – | – | `calendar.show` ≥ SA | Client-side filter only | REDESIGN |
-| Reminders | Recurring queue task `* * * * *` e-mails due reminders using `$GLOBALS['eventReminderEmail']` text (`config.php:228-242`), then disables reminder | `modules/calendar/tasks/Reminders.php:47-100`, registered `modules/calendar/tasks/tasks.php:39` | `Calendar::getAllDueReminders()` (`lib/Calendar.php:209-250`), `Calendar::sendEmail()` (`:944`) | calendar_event, queue, email_history | – | Reminder checkbox shown only if queue ran within 5 min (`CandidatesUI.php:1748-1755`, `lib/QueueProcessor.php:513-525`); needs external cron (FEAT-010) | REPLACE (job scheduler + calendar provider reminders) |
+| Reminders | Recurring queue task `* * * * *` e-mails due reminders using `$GLOBALS['eventReminderEmail']` text (`config.php:228-242`), then disables reminder | `modules/calendar/tasks/Reminders.php:47-100`, registered `modules/calendar/tasks/tasks.php:39` | `Calendar::getAllDueReminders()` (`lib/Calendar.php:209-250`), `Calendar::sendEmail()` (`:944`) | calendar_event, queue, email_history | – | Reminder checkbox shown only if queue ran within 5 min (`CandidatesUI.php:1747-1754`, `lib/QueueProcessor.php:513-525`); needs external cron (FEAT-010) | REPLACE (job scheduler + calendar provider reminders) |
 | Customize calendar | Site calendar preferences | `m=settings&a=customizeCalendar` (`SettingsUI.php:453`) | `CalendarSettings` (`lib/Calendar.php:981+`) | settings | GET ≥ DEMO, POST ≥ SA | – | REDESIGN |
 
 ### 2.7 Companies (`modules/companies`)
@@ -227,7 +227,7 @@ Columns: **Entry** = `m=`/`a=` and `file:line` of the `case`; **Access** = the c
 | Reports overview | 6 entity counts × 9 periods (54 COUNT queries per page load) | `a=reports` (`ReportsUI.php:86-89`, `:93-168`) | `Statistics` (`lib/Statistics.php:64-227`) | company, candidate, contact, joborder, candidate_joborder_status_history | AUTH (0 checks in `ReportsUI.php`) | – | REPLACE (analytics) |
 | Submission report | Per period: job orders with submissions and the submitted candidates | `a=showSubmissionReport` (`:66`, `:188-266`) | `Statistics::getSubmissionJobOrders()/getSubmissionsByJobOrder()` | status history, joborder, candidate | AUTH | Counts history rows (FEAT-008) | REPLACE |
 | Placement report | Same for placements | `a=showPlacementReport` (`:70`, `:268-346`) | `Statistics::getPlacementsJobOrders()` | as above | AUTH | – | REPLACE |
-| Job order report (PDF) | Editable form (site, company, position, period, managers, notes) → FPDF "Recruiting Summary Report" with a bar graph of pipeline / submitted / interviewing / placed | `a=customizeJobOrderReport` (`:74`, `:348-398`); `a=generateJobOrderReportPDF` (`:62`, `:409-565`) | `Statistics::getJobOrderReport()` (`:601`), FPDF | joborder, candidate_joborder, status history | AUTH | PDF content comes entirely from GET parameters (`:421-439`); bar labelled "Screened" is total pipeline (`GraphsUI.php:176`, `ReportsUI.php:374-377`); hard-coded `cognizo` branding (`:450-456`); server fetches its own graph over HTTP (`:487-500`) | REPLACE |
+| Job order report (PDF) | Editable form (site, company, position, period, managers, notes) → FPDF "Recruiting Summary Report" with a bar graph of pipeline / submitted / interviewing / placed | `a=customizeJobOrderReport` (`:74`, `:348-398`); `a=generateJobOrderReportPDF` (`:62`, `:409-565`) | `Statistics::getJobOrderReport()` (`:601`), FPDF | joborder, candidate_joborder, status history | AUTH | PDF content comes entirely from GET parameters (`:422-439`); bar labelled "Screened" is total pipeline (`GraphsUI.php:177`, `ReportsUI.php:382-385`); hard-coded `cognizo` branding (`:450-456`); server fetches its own graph over HTTP (`:494-500`) | REPLACE |
 | EEO report | Pie/bar charts by gender/ethnicity/veteran/disability over period (week/month/all) and status (all/rejected/placed) | `a=customizeEEOReport` (`:78`), `a=generateEEOReportPreview` (`:82`, `:567-720`) | `Statistics::getEEOReport()` (`:694`) | candidate, candidate_joborder, eeo_* | AUTH (not gated on `can_see_eeo_info`) | Chart data passed in image URLs | REDESIGN (compliance reporting) |
 | Graph view | Displays an image URL passed in `theImage` | `a=graphView` (`:58`, `:171-186`) | – | – | AUTH | – | RETIRE |
 | Graphs (images) | Unauthenticated: `jobOrderReportGraph`, `generic`, `genericPie`, `wordVerify` (CAPTCHA), `testGraph`; logged-in: `activity`, `newCandidates`, `newJobOrders`, `newSubmissions`, `miniPlacementStatistics`, `miniJobOrderPipeline` | `GraphsUI.php:78-131` | `GraphGenerator`, artichow | status history etc. | mixed (`_authenticationRequired=false`, `:48`) | artichow is PHP-4-era | REPLACE |
@@ -267,10 +267,10 @@ All careers features are **PUBLIC** (no login) and operate on `Site::getFirstSit
 | Feature | What it really does | Entry (`p=` unless noted) | Backing lib | Tables | Notes | Disp. |
 |---|---|---|---|---|---|---|
 | Portal home | Renders "Content - Main" template of the active board | default (`CareersUI.php:859-933`) | `CareerPortalSettings::getTemplate()` (`lib/CareerPortal.php:307`) | settings, career_portal_template(_site) | `?templateName=` overrides active template (`:106-109`) | REDESIGN |
-| Job listings | Table of shared public jobs if `allowBrowse` | `showAll` (`:151-178`), `getResultsTable()` (`:1115`) | `JobOrders::getAll(JOBORDERS_STATUS_SHARE)` (`:115`) | joborder, company | – | REDESIGN |
+| Job listings | Table of shared public jobs if `allowBrowse` | `showAll` (`:151-178`), `getResultsTable()` (`:1115`) | `JobOrders::getAll(JOBORDERS_STATUS_SHARE)` (`:118`) | joborder, company | – | REDESIGN |
 | Job details | Single job page | `showJob` (`:793-854`) | `JobOrders::get()` | joborder | – | REDESIGN |
 | Job search | `search` (`:180-182`) and `searchResults` (`:856-858`) are **empty branches**; `<a-LinkSearch>` still rendered (`:939`) | – | – | – | Broken/stub (FEAT-011) | REDESIGN |
-| Apply (with resume upload, questionnaire, EEO) | Form built from template tags incl. `<input-eeo-*>` (`:620-650`); multi-step if questionnaire | `applyToJob` (`:412-713`) | `Questionnaire`, `AttachmentCreator` | – | No CAPTCHA/rate limit (`grep -i captcha modules/careers/CareersUI.php` → none) | REDESIGN |
+| Apply (with resume upload, questionnaire, EEO) | Form built from template tags incl. `<input-eeo-*>` (`:621-650`); multi-step if questionnaire | `applyToJob` (`:412-713`) | `Questionnaire`, `AttachmentCreator` | – | No CAPTCHA/rate limit (`grep -i captcha modules/careers/CareersUI.php` → none) | REDESIGN |
 | Apply submit | Finds candidate by e-mail (`:1298`) else creates one (source "Online Careers Website" `:1251`, owner = automated user); runs questionnaire actions (`:1345`); attaches resume; adds to pipeline at 100 (`:1414`); logs activity; e-mails candidate (`EMAIL_TEMPLATE_CANDIDATEAPPLY` `:1475`) and job owner + recruiter (`EMAIL_TEMPLATE_CANDIDATEPORTALNEW` `:1529`) | `onApplyToJobOrder` (`:715`, `onApplyToJobOrder()` `:1190-1603`) | `Candidates`, `Pipelines`, `ActivityEntries`, `CareerPortalSettings::sendEmail()` | candidate, attachment, candidate_joborder, activity, career_portal_questionnaire_history, email_history | No consent capture, no duplicate check beyond e-mail | REDESIGN |
 | Candidate "registration/login" | Enabled by `candidateRegistration`; "login" = POSTed template fields matched against candidate columns (default template: e-mail + last name + ZIP) | `candidateRegistration` (`:359-410`), `ProcessCandidateRegistration()` (`:1635-1735`) | – | candidate | No password; cookie `cats<site>cw` holds the fields for 2 weeks (`:1720-1728`) (FEAT-005) | REPLACE (proper candidate accounts / magic-link) |
 | Candidate profile update | View/edit own profile, latest resume, logout | `registeredCandidateProfile` (`:183-257`), `onRegisteredCandidateProfile` (`:259-357`), `pa=updateProfile`/`pa=logout` (`:134-148`) | `Candidates::update()` | candidate, attachment | As above | REPLACE |
@@ -283,7 +283,7 @@ All careers features are **PUBLIC** (no login) and operate on `Site::getFirstSit
 | Feature | What it really does | Entry | Tables | Access | Notes | Disp. |
 |---|---|---|---|---|---|---|
 | RSS feed | RSS 2.0 of shared public jobs linking to careers page | `m=rss` / `rss/index.php` (`RssUI.php:57-66`, `displayPublicJobOrders()`) | joborder | PUBLIC | First site only | KEEP (minor) |
-| XML job feed | Template-driven XML for job boards: `indeed.xtpl`, `simplyhired.xtpl`, `rss.xtpl`; `?t=` picks template; access logged to `http_log` | `m=xml` / `xml/index.php` (`XmlUI.php:62-70`, `:128-340`) | joborder, xml_feeds, http_log | PUBLIC | Formats date from 2008-era; ASSUMPTION: current Indeed/other boards require different schemas/APIs | REPLACE (job distribution/multiposting) |
+| XML job feed | Template-driven XML for job boards: `indeed.xtpl`, `simplyhired.xtpl`, `rss.xtpl`; `?t=` picks template; access logged to `http_log` | `m=xml` / `xml/index.php` (`XmlUI.php:62-70`, `:128-340`) | joborder, xml_feeds, http_log | PUBLIC | Pull-only: push submission `XmlTemplate::submitXMLFeeds()` is an empty hook stub (`lib/XmlJobExport.php:108-111`), never called. ASSUMPTION: current Indeed/other boards require different schemas/APIs | REPLACE (job distribution/multiposting) |
 
 ### 2.16 Settings / Administration (`modules/settings`)
 
@@ -313,7 +313,7 @@ All 51 `a=` actions, `SettingsUI.php` line of the `case` and effective gate:
 | Backup | `createBackup` (`:417`), `deleteBackup` (`:425`), `modules/settings/ajax/backup.php` | Zip of SQL dump (+restore chunks) and/or attachments stored as a `catsbackup` attachment; **restore only via installer** (`modules/install/ajax/ui.php:679-694`) | attachment, all tables | ≥ SA | REPLACE (managed DB/object-store backups) |
 | Professional / upgrade | `professional` (`:343`, `manageProfessional()` `:2684`), `Professional.tpl` | License-key entry and catsone.com upsell; with the shipped key every install is already "Professional" (§5) | – | ≥ DEMO | RETIRE |
 | Firefox toolbar modal | `getFirefoxModal` (`:671`) | "Download Firefox" prompt | – | AUTH | RETIRE |
-| First-run pages | `newInstallPassword` (`:260`), `forceEmail` (`:275`), `newSiteName` (`:290`), `upgradeSiteName` (`:305`), `newInstallFinished` (`:320`) | Legacy post-install prompts (also driven from `LoginUI::attemptLogin()` `:396-426`) | user, site | ≥ SA | REDESIGN (onboarding) |
+| First-run pages | `newInstallPassword` (`:260`), `forceEmail` (`:275`), `newSiteName` (`:290`), `upgradeSiteName` (`:305`), `newInstallFinished` (`:320`) | Legacy post-install prompts (also driven from `LoginUI::attemptLogin()` `:392-430`) | user, site | ≥ SA | REDESIGN (onboarding) |
 | Wizard AJAX | `ajax_wizardAddUser` (`:702`), `…DeleteUser` (`:716`), `…CheckKey` (`:730`), `…Localization` (`:744`), `…FirstTimeSetup` (`:758`), `…License` (`:772`), `…Password` (`:786`, password in GET, min 5 chars `:3206`), `…SiteName` (`:800`), `…Email` (`:814`, ≥ READ), `…Import` (`:828`), `…Website` (`:842`, only a hook) | Back-end of the login wizard | user, site, settings | ≥ SA unless noted | REDESIGN |
 | ASP localization | `aspLocalization` (`:641`) | Hosted-edition localization prompt | site | ≥ SA | RETIRE |
 
@@ -321,7 +321,7 @@ All 51 `a=` actions, `SettingsUI.php` line of the `case` and effective gate:
 
 | Feature | What it really does | Entry | Tables | Access | Notes | Disp. |
 |---|---|---|---|---|---|---|
-| Login form / login | Username (or `user@siteID`) + password; md5 compare (`lib/Users.php:840`); records attempt | `a=showLoginForm` (`LoginUI.php:72`), `a=attemptLogin` (`:53`, `:186-435`) | user, user_login, site | PUBLIC | Then drives wizard/first-run redirects (`:296-433`); optional single-session (`ENABLE_SINGLE_SESSION`, `config.php:183`) | REPLACE (IdP/SSO + modern hashing) |
+| Login form / login | Username (or `user@siteID`) + password; md5 compare (`lib/Users.php:840`); records attempt | `a=showLoginForm` (`LoginUI.php:72`), `a=attemptLogin` (`:53`, `attemptLogin()` `:179-431`) | user, user_login, site | PUBLIC | Then drives wizard/first-run redirects (`:293-431`); optional single-session (`ENABLE_SINGLE_SESSION`, `config.php:183`) | REPLACE (IdP/SSO + modern hashing) |
 | LDAP / AD auth | `AUTH_MODE` `sql`, `ldap`, `sql+ldap` (`config.php:48`); first LDAP login auto-creates a **disabled** local user pending approval (`lib/Users.php:846-851`) | `Users::isCorrectLogin()` (`:782-870`), `LDAP` | user | PUBLIC | Only directory integration present; no SAML/OIDC | REPLACE |
 | Forgot password | Form posts username; handler calls non-existent `Users::getPassword()` and undefined `PASSWORD_RESET_SUBJECT/BODY` | `a=forgotPassword` (`:57-66`, `:448-480`) | – | PUBLIC | Broken; not linked from `Login.tpl` (FEAT-009) | REPLACE (token reset) |
 | No-cookies modal | Help popup | `a=noCookiesModal` (`:68`) | – | PUBLIC | – | RETIRE |
@@ -332,7 +332,7 @@ All 51 `a=` actions, `SettingsUI.php` line of the `case` and effective gate:
 
 | Feature | Entry | Notes | Disp. |
 |---|---|---|---|
-| Authenticate (credentials in GET `CATSUser`/`CATSPassword`) | `a=authenticate` (`ToolbarUI.php:71`, `_authenticate()` `:90-121`) | Requires Professional (`:114`) — always true | RETIRE |
+| Authenticate (credentials in GET `CATSUser`/`CATSPassword`) | `a=authenticate` (`ToolbarUI.php:71`, `_authenticate()` `:89-121`) | Requires Professional (`:114`) — always true | RETIRE |
 | Check e-mail in system | `a=checkEmailIsInSystem` (`:75`) | Candidate lookup by e-mail | RETIRE |
 | Store Monster resume text | `a=storeMonsterResumeText` (`:79`) | Scrapes pasted Monster.com HTML into session for Add Candidate | RETIRE |
 | Legacy JS lib / remote version | `a=getJavaScriptLib` (`:67`), `a=getRemoteVersion` (`:63`, returns 99999) | "Obsolete" per comment | RETIRE |
@@ -352,7 +352,7 @@ All 51 `a=` actions, `SettingsUI.php` line of the `case` and effective gate:
 
 | Feature | Notes | Disp. |
 |---|---|---|
-| Generic modal wizard engine (pages stored in `$_SESSION['CATS_WIZARD']`, `a=ajax_getPage`) used by the post-login first-run wizard: Welcome, License, Password (if admin/`cats`), E-mail, Site name, Setup Users (`LoginUI.php:300-362`) | `WizardUI` page list is commented out (`WizardUI.php:52-73`); login-wizard `Localization.tpl` never added; "Setup Users" add fails with 0 licenses (FEAT-019) | REDESIGN (onboarding) |
+| Generic modal wizard engine (pages stored in `$_SESSION['CATS_WIZARD']`, `a=ajax_getPage`) used by the post-login first-run wizard: Welcome, License, Password (if admin/`cats`), E-mail, Site name, Setup Users (`LoginUI.php:293-371`) | `WizardUI` page list is commented out (`WizardUI.php:52-73`); login-wizard `Localization.tpl` never added; "Setup Users" add fails with 0 licenses (FEAT-019) | REDESIGN (onboarding) |
 
 ### 2.21 Tests (`modules/tests`)
 
@@ -370,7 +370,7 @@ All 51 `a=` actions, `SettingsUI.php` line of the `case` and effective gate:
 
 | Feature | Evidence | Disp. |
 |---|---|---|
-| Tabs & sub-tabs with `*al=LEVEL@secobj` visibility (cosmetic only) | `CandidatesUI.php:73-76`, `lib/TemplateUtility.php:600-720` | REDESIGN |
+| Tabs & sub-tabs with `*al=LEVEL@secobj` visibility (cosmetic only) | `CandidatesUI.php:73-76`, `lib/TemplateUtility.php:570-720` (`printTabs()`) | REDESIGN |
 | Datagrid engine (column chooser, resize `ajax/setColumnWidth.php`, filters, paging, selection, export, action area) | `lib/DataGrid.php` (2649 LOC) | REPLACE (modern table component + API) |
 | Quick-action menus (Add To List, Add To Pipeline, Merge) | `src/OpenCATS/UI/*QuickActionMenu.php`, `js/quickAction.js` | REDESIGN |
 | Address parsing / ZIP lookup | `ajax/getParsedAddress.php`, `ajax/zipLookup.php` (unauthenticated `AJAXInterface`); US ZIP DB off (`US_ZIPS_ENABLED=false`, `config.php:262`) | REPLACE |
@@ -387,12 +387,12 @@ All 51 `a=` actions, `SettingsUI.php` line of the `case` and effective gate:
 
 | Code | Constant (`constants.php:120-130`) | Label (seed `db/cats_schema.sql:267-277`) | `triggers_email` seed | Special handling in code |
 |---|---|---|---|---|
-| 0 | `PIPELINE_STATUS_NOSTATUS` | No Status | 0 | Excluded from picker (`lib/Pipelines.php:419`) |
+| 0 | `PIPELINE_STATUS_NOSTATUS` | No Status | 0 | Excluded from picker (`lib/Pipelines.php:417`) |
 | 100 | `PIPELINE_STATUS_NOCONTACT` | No Contact | 0 | **Initial status** on every add (`lib/Pipelines.php:110`, literal) |
 | 200 | `PIPELINE_STATUS_CONTACTED` | Contacted | 0 | – |
 | 250 | `PIPELINE_STATUS_CANDIDATE_REPLIED` | Candidate Responded | 0 | – |
 | 300 | `PIPELINE_STATUS_QUALIFYING` | Qualifying | 1 | – |
-| 400 | `PIPELINE_STATUS_SUBMITTED` | Submitted | 1 | Counted as a *submission* for every history row (`lib/Statistics.php:102,241,312,559`); pipeline "submitted" flag (`lib/Pipelines.php:592-607`); dashboard "important" |
+| 400 | `PIPELINE_STATUS_SUBMITTED` | Submitted | 1 | Counted as a *submission* for every history row (`lib/Statistics.php:102,241,312,559`); pipeline "submitted" flag (`lib/Pipelines.php:594-607`); dashboard "important" |
 | 500 | `PIPELINE_STATUS_INTERVIEWING` | Interviewing | 1 | Dashboard "important"; "Interviews" grid column (`lib/JobOrders.php:1054-1062`) |
 | 600 | `PIPELINE_STATUS_OFFERED` | Offered | 1 | Dashboard "important" |
 | 650 | `PIPELINE_STATUS_NOTINCONSIDERATION` | Not in Consideration | 0 | Excluded from "submitted" join in candidate grid (`lib/Candidates.php` grid, `:1979`) |
@@ -434,14 +434,14 @@ All 51 `a=` actions, `SettingsUI.php` line of the `case` and effective gate:
 | Step | Condition | Effect | Evidence |
 |---|---|---|---|
 | 1 | target = 800 | Abort if `openings_available <= 0` | `:2932-2942`, `lib/JobOrders.php:827-860` |
-| 2 | "Add activity" checked | Insert activity (type chosen, default note "Status change: X" pre-filled by JS `js/activity.js:710-714`; status names highlighted orange) | `:2946-2990` |
+| 2 | "Add activity" checked | Insert activity (type chosen, default note "Status change: X" pre-filled by JS `js/activity.js:716-720`; status names highlighted orange) | `:2949-2996` |
 | 3 | status actually differs | UPDATE `candidate_joborder.status`, `date_modified` | `lib/Pipelines.php:333-347` |
 | 4 | " | INSERT `candidate_joborder_status_history(from,to,date)` | `lib/Pipelines.php:350-352,427-462` |
 | 5 | " | INSERT `history` audit row (`DATA_ITEM_PIPELINE`) | `lib/Pipelines.php:355-365` |
-| 6 | "Send e-mail" checked AND template not disabled AND candidate has e-mail AND user not DEMO | Synchronous e-mail, subject `CANDIDATE_STATUSCHANGE_SUBJECT`, body = `EMAIL_TEMPLATE_STATUSCHANGE` with `%CANDSTATUS% %CANDPREVSTATUS% %JBODTITLE% %JBODCLIENT%` substituted client-side | `:3040-3080`, `lib/Pipelines.php:367-378`, `js/activity.js:738-750` |
+| 6 | "Send e-mail" checked AND template not disabled AND candidate has e-mail AND user not DEMO | Synchronous e-mail, subject `CANDIDATE_STATUSCHANGE_SUBJECT`, body = `EMAIL_TEMPLATE_STATUSCHANGE` with `%CANDSTATUS% %CANDPREVSTATUS% %JBODTITLE% %JBODCLIENT%` substituted client-side | `:3046-3083`, `lib/Pipelines.php:367-378`, `js/activity.js:738-750` |
 | 7 | target = 800 | `openings_available - 1` | `:3089-3093` |
 | 8 | source = 800, target ≠ 800 | `openings_available + 1` | `:3096-3100` |
-| 9 | "Schedule event" checked | INSERT calendar_event (reminder fields) | `:3103-3230` |
+| 9 | "Schedule event" checked | INSERT calendar_event (reminder fields) | `:3103-3260` |
 
 Not implemented: automatic job-order status change when full, automatic rejection e-mails, interview scheduling, SLA timers, hiring-manager notifications, webhooks, any state-dependent required fields. The only e-mail trigger is the manual checkbox; the default checkbox state comes from `candidate_joborder_status.triggers_email` on the candidate side (`:1688`) but from E-Mail Settings on the job-order side (`JobOrdersUI.php:1462-1466`).
 
@@ -456,7 +456,7 @@ Not implemented: automatic job-order status change when full, automatic rejectio
 | 3 | Home `a=getAttachment` | `HomeUI.php:75`: `/* FIXME: undefined function getAttachment()` | Commented out |
 | 4 | Lists `a=show` | `ListsUI.php:71`: `/* FIXME: function show() undefined` | Commented out |
 | 5 | Dynamic saved lists | Only `is_dynamic = 0` is ever written (`lib/SavedLists.php:212`); `showList()` has no dynamic branch (`ListsUI.php:159-180`) | Schema + label only |
-| 6 | Quick-search over lists | `HomeUI.php:204` `//$listsRS = $search->lists($query);` | Commented out |
+| 6 | Quick-search over lists | `HomeUI.php:209` `//$listsRS = $search->lists($query);` | Commented out |
 | 7 | Careers job search | `CareersUI.php:180-182`, `:856-858` empty branches | Stub |
 | 8 | Careers `allowXMLSubmit`, `useCATSTemplate` | `lib/CareerPortal.php:83-84`; only read at `CareersUI.php:962` | No UI |
 | 9 | Customize Reports | `SettingsUI.php:478-481` empty postback | Stub |
@@ -466,16 +466,17 @@ Not implemented: automatic job-order status change when full, automatic rejectio
 | 13 | Toolbar `attemptLogin`, XPI | `ToolbarUI.php:59-61`; `install.tpl:62` points to missing `catstoolbar.xpi` | Broken |
 | 14 | Queue web UI | `QueueUI.php:49-56` empty switch | Stub |
 | 15 | Wizard module page list | `WizardUI.php:52-73` commented | Stub |
-| 16 | Login-wizard Localization / Register / Reregister pages | Localization never added; Register only under `CATS_TEST_MODE` (`LoginUI.php:313-329`), which is not defined in `config.php` | Dead |
+| 16 | Login-wizard Localization / Register / Reregister pages | Localization never added; Register only under `CATS_TEST_MODE` (`LoginUI.php:312-329`), which is not defined in `config.php` | Dead |
 | 17 | `graphs a=testGraph` | "intentionally empty" (`GraphsUI.php:139`) | Stub |
 | 18 | Orphan templates | `candidates/HotList.tpl`, `candidates/Duplicates.tpl`, `careers/{Openings,SearchOpenings,Blank2,BlankNoMargin}.tpl`, `import/ImportCommits.tpl`, `reports/NewDataItems.tpl`, `toolbar/install.tpl` | Dead |
 | 19 | Empty AJAX file | `ajax/getReportHTML.php` (0 bytes) | Dead |
 | 20 | Unused columns | `candidate_joborder.date_submitted`, `candidate_joborder_status.can_be_scheduled` | Dead |
 | 21 | Dead libs | `ControlPanel.php`, `Profile.php`, `Display.php`, `CBFUtility.php`, `JavaScriptCompressor.php`, `Encryption.php` | Dead (~3.9k LOC) |
 | 22 | "Professional" licensing | `License::__construct()` sets professional + 32767 expiry (`lib/License.php:59-73`); `setKey()` returns true for any key (`:137-162`); `LicenseUtility::validateProfessionalKey()` returns true (`:658-661`); `isParsingEnabled()` returns true on every path (`:687-706`). Upsell pages remain (`Professional.tpl`, links to `catsone.com/professional`), random re-validation on page footer (`lib/TemplateUtility.php:842-848`) | Neutered upsell |
-| 23 | ASP / hosted-edition gates | `isASP()` (company_id≠0), `isHrMode()`, MULTI_SA "administrative hide", `aspLocalization`, `ASP_WIZARD_*` hooks (`LoginUI.php:350,364`) | Dormant |
-| 24 | `ACL_SETUP` roles | Entire role/ACL map is commented in `config.php:336-360` (only code-level customisation) | Disabled by default |
+| 23 | ASP / hosted-edition gates | `isASP()` (company_id≠0), `isHrMode()`, MULTI_SA "administrative hide", `aspLocalization`, `ASP_WIZARD_*` hooks (`LoginUI.php:350,365`) | Dormant |
+| 24 | `ACL_SETUP` roles | Entire role/ACL map is commented in `config.php:343-368` (only code-level customisation) | Disabled by default |
 | 25 | Sphinx full-text, US ZIP radius search, resume parsing | `ENABLE_SPHINX=false` (`config.php:97`), `US_ZIPS_ENABLED=false` (`:262`), `PARSING_ENABLED=false` (`:51`) | Off by default |
+| 26 | Job-board push submission | `XmlTemplate::submitXMLFeeds()` is only a hook call (`lib/XmlJobExport.php:108-111`) and has no caller (`grep -rn submitXMLFeeds` → definition only); `xml_feeds.post_url` / `xml_feed_submits` seeded but unused | Stub |
 
 ---
 
@@ -491,7 +492,7 @@ Not implemented: automatic job-order status change when full, automatic rejectio
 ### FEAT-002 — Candidate merge corrupts unrelated records and concatenates untrusted strings into SQL
 - **Severity:** HIGH
 - **Finding:** `mergeDuplicates()` moves `activity`, `attachment` and `calendar_event` rows by `data_item_id` only, without `data_item_type`, so contacts/companies/job orders whose numeric ID equals the discarded candidate ID lose their activities/attachments/events to the surviving candidate. The final `UPDATE candidate SET ...` is assembled from DB values and raw POST values (`$params['emails']`), and the loser is deleted without `site_id`, history or extra-field cleanup. MyISAM makes the sequence non-atomic.
-- **Evidence:** `lib/Candidates.php:1314-1326` (`UPDATE activity SET data_item_id = %s WHERE data_item_id = %s AND site_id = %s`), `:1331-1343` (attachment), `:1347-1359` (calendar_event); string concatenation `:1437-1560`, e.g. `:1509` `"email1 = '" . $params['emails'][0]."'"` fed from `CandidatesUI.php:3537-3543`; delete `:1579-1584` (`DELETE FROM candidate WHERE candidate_id = %s`).
+- **Evidence:** `lib/Candidates.php:1314-1326` (`UPDATE activity SET data_item_id = %s WHERE data_item_id = %s AND site_id = %s`), `:1331-1343` (attachment), `:1347-1359` (calendar_event); string concatenation `:1433-1560`, e.g. `:1509` `"email1 = '" . $params['emails'][0]."'"` fed from `CandidatesUI.php:3538-3541`; delete `:1579-1584` (`DELETE FROM candidate WHERE candidate_id = %s`).
 - **Impact:** Silent cross-entity data corruption; SQL errors on names containing `'` after activities were already moved (partial merge); SQL injection surface for SA users.
 - **Recommendation:** Disable merge until rewritten; the new implementation must filter by `(data_item_type, data_item_id)`, run in a transaction, use parameters, and write an audit record of the merge.
 
@@ -533,7 +534,7 @@ Not implemented: automatic job-order status change when full, automatic rejectio
 ### FEAT-008 — Reporting numbers are fragile
 - **Severity:** MEDIUM
 - **Finding:** Submissions/placements are `COUNT(*)` of status-history rows, so toggling a candidate into Submitted twice counts two submissions; deletions erase history (FEAT-003). The default statistics job-order status list contains `'OnHold'` whereas the status is `'On Hold'`, excluding On-Hold jobs. The job-order PDF's numbers and labels come from GET parameters and "Screened" actually shows the total pipeline.
-- **Evidence:** `lib/Statistics.php:90-121`; `lib/JobOrderStatuses.php:55` vs `:43`; `modules/reports/ReportsUI.php:421-439`; `modules/graphs/GraphsUI.php:176`; `ReportsUI.php:374-377`.
+- **Evidence:** `lib/Statistics.php:90-121`; `lib/JobOrderStatuses.php:55` vs `:43`; `modules/reports/ReportsUI.php:422-439`; `modules/graphs/GraphsUI.php:177`; `ReportsUI.php:382-385`.
 - **Impact:** KPIs (time-to-fill, submittal counts) are unreliable and non-reproducible.
 - **Recommendation:** Event-sourced pipeline transitions + analytics model; fix the typo in any interim release.
 
@@ -547,7 +548,7 @@ Not implemented: automatic job-order status change when full, automatic rejectio
 ### FEAT-010 — Reminders and background jobs cannot run on the supported stack
 - **Severity:** MEDIUM
 - **Finding:** Reminders (and exception cleanup) run only when an external cron invokes `QueueCLI.php` every minute; the repo ships no cron configuration and `QueueCLI.php` calls `get_magic_quotes_runtime()`/`get_magic_quotes_gpc()`, removed in PHP 8. The reminder option is hidden unless the queue ran within 5 minutes.
-- **Evidence:** `QueueCLI.php:59,65`; PHP 8.4 `function_exists("get_magic_quotes_runtime")` → false; `modules/calendar/tasks/Reminders.php:47`; `lib/QueueProcessor.php:513-525`; `CandidatesUI.php:1748-1755`; `grep -rn cron docker/` → none.
+- **Evidence:** `QueueCLI.php:59,65`; PHP 8.4 `function_exists("get_magic_quotes_runtime")` → false; `modules/calendar/tasks/Reminders.php:47`; `lib/QueueProcessor.php:513-525`; `CandidatesUI.php:1747-1754`; `grep -rn cron docker/` → none.
 - **Impact:** Calendar reminders silently never send.
 - **Recommendation:** Replace with a supervised worker/scheduler; move reminders to calendar-provider notifications.
 
@@ -561,7 +562,7 @@ Not implemented: automatic job-order status change when full, automatic rejectio
 ### FEAT-012 — Obsolete third-party integrations and telemetry
 - **Severity:** MEDIUM
 - **Finding:** (a) Resume parsing sends resume text + license key to `http://soap.resfly.com/parse.php` over HTTP; (b) daily "new version" check POSTs site name, UID, active-user count, PHP version, user agent and license key to `http://www.catsone.com/catsnewversion.php` from the dashboard; (c) Firefox XUL toolbar endpoints remain, including unauthenticated `a=getLicenseKey`.
-- **Evidence:** `wsdl/parse.wsdl:78`, `wsdl/status.wsdl:69`, `lib/ParseUtility.php:85-95`; `lib/NewVersionCheck.php:100-123`, `:165-177`, `modules/home/HomeUI.php:95`; `modules/toolbar/ToolbarUI.php:46,83,282-285`.
+- **Evidence:** `wsdl/parse.wsdl:78`, `wsdl/status.wsdl:69`, `lib/ParseUtility.php:85-95`; `lib/NewVersionCheck.php:98-123`, `:165-177`, `modules/home/HomeUI.php:95`; `modules/toolbar/ToolbarUI.php:46,83,282-285`.
 - **Impact:** Data leakage to third parties without consent; dead features confuse users.
 - **Recommendation:** RETIRE toolbar and phone-home; REPLACE parsing with a contracted, GDPR-compliant parser behind an interface.
 
@@ -595,7 +596,7 @@ Not implemented: automatic job-order status change when full, automatic rejectio
 
 ### FEAT-017 — Half-implemented features
 - **Severity:** LOW
-- **Finding / Evidence:** See §4 (25 items with file:line).
+- **Finding / Evidence:** See §4 (26 items with file:line).
 - **Impact:** Dead UI paths and confusing admin pages; wasted maintenance.
 - **Recommendation:** Do not port; list as RETIRE in the migration backlog.
 
