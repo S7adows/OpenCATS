@@ -122,7 +122,7 @@ Vendors examined: Greenhouse, Lever, Ashby, SmartRecruiters, Workable, iCIMS, Wo
    - California's CPPA automated-decision-making rules and the EU AI Act high-risk timeline (see the AI landscape document) are also changing.
 
    **[INFERENCE]** Compliance features should therefore be **configurable policy** (jurisdiction packs), not hard-coded rules.
-10. **[RECOMMENDATION]** OpenCATS 2.0 needs an explicit **"enterprise-evaluable" bar**: SSO+MFA, a scoped RBAC with field masks, an append-only audit log, privacy lifecycle tooling, an EEO/OFCCP module, structured pay ranges, WCAG 2.2 AA plus an ACR, a versioned API with signed webhooks, and a security evidence pack. This must be in place **before** feature parity work. Any hosted offering additionally needs SOC 2 Type II, a DPA and EU/US regions (§7).
+10. **[RECOMMENDATION]** OpenCATS 2.0 needs an explicit **"enterprise-evaluable" bar**: SSO+MFA, a scoped RBAC with field masks, an append-only audit log, privacy lifecycle tooling, an EEO/OFCCP module, structured pay ranges, WCAG 2.2 AA plus an ACR, a versioned API with signed webhooks, and a security evidence pack. This must be in place **before** feature parity work. Any hosted offering additionally needs SOC 2 Type II, a DPA and EU/US regions (§6).
 
 ---
 ## 4. Requirements matrix
@@ -155,7 +155,7 @@ Source numbers such as `[6]` link to §10. "GH" = Greenhouse, "LV" = Lever, "SR"
 | ER-15 | SOC 2 Type II report (shared under NDA) | Attestation | Vendor-risk programmes ask for SOC 2 as the default evidence. AICPA programme (described on [[20]][s20], F) | OR: SOC 1 and/or SOC 2 reports provided as Confidential Information [[21]][s21] (F). GH, iCIMS, SR, Workable, Ashby, LV, WD pages mention "SOC 2" per automated probes [[42]][s42] (AG) | TABLE STAKE (hosted SaaS) | n/a (OSS). No hosted offering exists | n/a (OSS); CRITICAL for any hosted offer |
 | ER-16 | ISO/IEC 27001:2022, plus 27701 (privacy), 27017/27018 (cloud/PII) | Attestation | EU and global buyers favour ISO certificates; 27701 maps to GDPR accountability [[75]][s75] (UV) | OR compliance catalogue covers ISO 27001/27017/27018/27701 and ISO 42001 (per-service applicability not verified) [[20]][s20] (F). Probes: GH (27001/27017/27018), Workable (27001/27017), iCIMS, SR, WD, LV (27001) [[42]][s42] (AG) | ENTERPRISE REQUIREMENT | n/a (OSS) | n/a; HIGH for hosted |
 | ER-17 | Independent penetration test (annual; summary letter); vulnerability disclosure policy; bug bounty | Security | Evidence of testing is a questionnaire staple. Public VDP per CISA pledge [[74]][s74] (UV) | OR: "regularly performs penetration and vulnerability testing" [[21]][s21] (F). LV/Employ: VDP via security@employinc.com, "we do not offer a bug bounty program" [[17]][s17] (F). GH: security.txt points to HackerOne [[42]][s42] (AG) | TABLE STAKE (pentest, VDP); DIFFERENTIATOR (paid bounty) | Private e-mail VDP only (`Security.MD:7`); no pentest record; `Security.MD:11` admits MD5 | HIGH |
-| ER-18 | Encryption in transit (TLS 1.2+) and at rest; field-level encryption of special-category data; key management | Security | GDPR Art. 32 security of processing [[54]][s54] (UV); ASVS V11/V12 [[28]][s28] (F) | GH and LV APIs are HTTPS-only (GH returns 401/403 over HTTP) [[4]][s4][[6]][s6] (F). At-rest details: U | TABLE STAKE | No at-rest or column encryption; no DB TLS; no HSTS (DB-011; SEC-015; SEC-018) | HIGH |
+| ER-18 | Encryption in transit (TLS 1.2+) and at rest; field-level encryption of special-category data; key management | Security | GDPR Art. 32 security of processing [[54]][s54] (UV); ASVS V11/V12 [[28]][s28] (F) | GH APIs are HTTPS-only (Harvest returns 403 and Audit Log 401 over HTTP) [[4]][s4][[6]][s6] (F). At-rest details: U | TABLE STAKE | No at-rest or column encryption; no DB TLS; no HSTS (DB-011; SEC-015; SEC-018) | HIGH |
 | ER-19 | Data residency: at least EU and US, customer-selectable; sovereign/government regions for regulated buyers | Privacy / Hosting | GDPR Ch. V transfer rules [[54]][s54] (UV); public-sector sovereignty | LV: separate **EU instance** (`hire.eu.lever.co`, `api.eu.lever.co`) [[16]][s16] (F). OR: 50+ regions in 28 countries running Fusion HCM; EU Sovereign, UK Sovereign, US Government and Australian Government clouds [[23]][s23] (F). SAP NS2: US-soil, US-citizen operation [[19]][s19] (F). GH, Ashby, SR, Workable, iCIMS, WD: U | ENTERPRISE REQUIREMENT | Self-hosting gives residency by default [INFERENCE]; no hosted regions | MEDIUM (LOW if self-host-only) |
 | ER-20 | DPA (GDPR Art. 28) with SCCs/UK addendum/DPF; published subprocessor list with change notice | Privacy / Contract | GDPR Art. 28 processor terms [[54]][s54] (UV); EU–US DPF [[71]][s71] (UV) | OR: contract checklists for DORA, EBA outsourcing, UK regs and NIS2 advisory published on the compliance page [[20]][s20] (F). LV probe: "subprocessor_list_published: null" [[42]][s42] (AG). Others U | TABLE STAKE (hosted) | n/a (OSS). Legacy sends resume text to a defunct third party (RISK-005; API-010) | n/a; CRITICAL if hosted |
 | ER-21 | Trust center: self-serve security docs, subprocessors, status page, security.txt | Procurement | Reduces questionnaire cycle time [INFERENCE] | Trust portals probed at trust.greenhouse.com, trust.ashbyhq.com, trust.smartrecruiters.com, trust.icims.com, security.workday.com; LV "does not run a self-serve trust portal … reports … under NDA" [[42]][s42] (AG) | ENTERPRISE REQUIREMENT | None | MEDIUM |
@@ -229,3 +229,628 @@ Source numbers such as `[6]` link to §10. "GH" = Greenhouse, "LV" = Lever, "SR"
 | ER-63 | Contract package: DPA, SLA, security addendum, sector addenda (DORA, NIS2, EBA outsourcing) | Procurement | Regulated customers push obligations to ICT providers [INFERENCE] | OR publishes DORA, EBA, UK and other contract checklists and a NIS2 advisory [[20]][s20] (F) | ENTERPRISE REQUIREMENT (regulated buyers) | n/a (OSS) | n/a; MEDIUM if hosted |
 
 ---
+## 5. Detailed findings
+
+### 5.1 Identity & access
+
+**What the market documents (first-hand).** Greenhouse's official Harvest documentation shows the permission model an enterprise ATS exposes [FACT, [[8]][s8] [[6]][s6] [[7]][s7] [[11]][s11], accessed 2026-09-25]:
+
+- **Global vs job-scoped rights.** A `site_admin` has "full permissions on all non-private jobs" (`harvest/_users.md:59`). Other users hold **job permissions**: a user role, of type `interviewer` or `job_admin` (e.g. "Standard"), granted per job (`harvest/_user_roles.md`, `harvest/_user_permissions.md:1-24`).
+- **Rule-based scoping.** **Future job permissions** grant a role automatically when a job is created in a given **office or department**, keyed by internal or external IDs (`_user_permissions.md:178-200`). This is attribute-based record scoping driven by org structure.
+- **Confidential jobs.** A `confidential` flag exists on jobs (`harvest/_jobs.md:189`). Combined with "non-private" in the site-admin definition, even top admins can be excluded from private searches.
+- **Granular admin and developer permissions.** Example: "Can manage ALL organization's API Credentials". API keys are permissioned **per endpoint**. Greenhouse also warns that inside an endpoint "Access to data in Harvest is binary: everything or nothing" (`harvest/_introduction.md:56-58`). Per-record API scoping is therefore **not** offered even by a mature vendor [INFERENCE].
+- **Approval chains.** Three approval types (`open_job`, `offer_job`, `offer_candidate`), with sequential or parallel approver groups, `approvals_required` quorum, `priority` and `version` (`harvest/_approvals.md:1-64`).
+
+Other vendors:
+
+- **SmartRecruiters.** Its API spec, via a third-party mirror, adds **access groups**, **system roles**, OAuth scopes down to `approvals_decide`, and audit events for **approval delegation** [SOURCE CLAIM · aggregator, [[40]][s40]].
+- **SAP SuccessFactors.** An aggregator paraphrase of SAP docs states that API authorisation is governed by the calling user's **role-based permissions (RBP)**, not by OAuth scopes [SOURCE CLAIM · aggregator, [[42]][s42]].
+- **Ashby.** SSO is available on all plans. SCIM is on Plus and above. Custom roles: none on Foundations, up to 3 on Plus, unlimited on Enterprise [SOURCE CLAIM · vendor · search excerpt, [[37]][s37] [[38]][s38] via [[36]][s36]].
+- **Greenhouse (support centre).** SAML 2.0 SSO on the new Core/Plus/Pro tiers, with Okta, OneLogin, Google and Entra ID preconfigured. SCIM on "Advanced and Expert" tiers, the legacy tier names [SOURCE CLAIM · vendor · search excerpt, [[29]][s29] [[30]][s30] [[31]][s31]]. An independent source claims Greenhouse SCIM provisions users but not groups [SOURCE CLAIM · independent · search excerpt, [[34]][s34]]; treat as a lead.
+
+**Why buyers need it.**
+
+- **Authorisation depth.** OWASP ASVS 5.0.0 (May 2025) requires authorisation at three levels [FACT, [[28]][s28]]:
+  - function level (8.2.1);
+  - data-item level, to prevent IDOR/BOLA (8.2.2);
+  - field level, to prevent BOPLA (8.2.3).
+
+  It also requires enforcement "at a trusted service layer" (8.3.1). These map one-to-one to ER-08, ER-10 and ER-11.
+- **Session and authenticator strength.** NIST SP 800-63B-4 (final) says [FACT, [[25]][s25]]:
+  - AAL2 verifiers "SHALL offer at least one phishing-resistant authentication option";
+  - AAL2 reauthentication SHOULD be ≤24 h, with inactivity ≤1 h;
+  - AAL3 limits are ≤12 h and ≤15 min.
+
+  These numbers give OpenCATS 2.0 defensible defaults (ER-04, ER-06).
+
+**OpenCATS gap.** One global access level per user, READ to ROOT (`PRODUCT_GAPS.md` GAP-003). No SSO, MFA, lockout or session rotation (GAP-001; SEC-001/007/014/021). A Standard Admin can mint ROOT users (SEC-013). AJAX handlers enforce login only (SEC-026). [FACT per Phase 0]
+
+**[INFERENCE]** The market's permission models (Greenhouse, SmartRecruiters, SAP RBP) converge on four elements:
+1. a small set of **global roles**;
+2. **per-job team roles**;
+3. **rule-based record scoping** by org attributes (office, department, business unit);
+4. **field-class restrictions** (EEO/demographics, compensation, private notes).
+
+OpenCATS 2.0's authorisation model should be designed around these four from day one. Retrofitting them later is costly.
+
+### 5.2 Security & compliance attestations
+
+**Vendor attestation evidence (as found this session).** None of the trust pages could be fetched. The "certifications" column comes from automated third-party keyword probes, which are unreliable: the Greenhouse probe lists "FedRAMP", but the official FedRAMP Marketplace data has no Greenhouse offering.
+
+| Vendor | Trust page (probe URL) | Certifications named (grade) | FedRAMP Marketplace, 2026-09-25 [FACT, [[19]][s19]] | Residency evidence | VDP / bug bounty |
+|---|---|---|---|---|---|
+| Greenhouse | trust.greenhouse.com | SOC 2, ISO 27001/27017/27018 (probe also shows PCI, HIPAA, FedRAMP keywords: unreliable) (AG) | Not listed | U | security.txt → HackerOne (AG) |
+| Lever (Employ) | lever.co/security | SOC 2, ISO 27001, PCI DSS (AG); reports under NDA, no self-serve portal (AG) | Not listed | **EU instance** (`hire.eu.lever.co`, `api.eu.lever.co`) (F, [[16]][s16]) | VDP at security@employinc.com; "we do not offer a bug bounty program" (F, [[17]][s17]) |
+| Ashby | trust.ashbyhq.com | SOC 2 (AG) | Not listed | U | U |
+| SmartRecruiters (SAP) | trust.smartrecruiters.com | SOC 2, ISO 27001 (AG) | Not listed | U | U |
+| Workable | workable.com/security | SOC 2, ISO 27001, ISO 27017 (AG) | Not listed | U | U |
+| iCIMS | trust.icims.com | SOC 2, ISO 27001, CSA STAR (AG) | Not listed | U | U |
+| Workday | security.workday.com | SOC 2, ISO 27001, FedRAMP (AG) | **Workday Government Cloud, Moderate, authorised 2022-07-11; scope includes Recruiting**; 5 agency ATOs | U | U |
+| SAP SuccessFactors | not probed | — | **SAP NS2 Cloud Intelligent Enterprise, Moderate (JAB), 2017-11-13; includes SuccessFactors Recruiting; "operated exclusively by U.S. citizens … data restricted to U.S. soil"**; DoD IL4 variant (DD-CIE) | US-only NS2 environments (F) | security.txt present (AG) |
+| Oracle | oracle.com/corporate/cloud-compliance (**fetched**) | Catalogue incl. SOC 1/2, ISO 27001/27017/27018/27701, CSA STAR, C5, ENS, IRAP, TX-RAMP, HIPAA, ISO 42001 (F: catalogue; per-service scope not verified) | **Oracle Fusion Cloud, Moderate, 2020-01-13; scope includes recruiting**; 9 agency ATOs | 50+ regions in 28 countries; EU/UK sovereign, US/AU government clouds (F, [[23]][s23]) | U |
+| Others (public-sector signal) | — | — | Avature Federal Platform (2025-03-28), Eightfold TIP (2025-04-10), HireVue (2019-05-10), NEOGOV (2025-08-25), Yello (2022-04-11), Monster MHME (2022-04-07, 19 agencies): all Moderate, Authorized. Phenom for Government: *FedRAMP Ready*. UKG Government Cloud: *Agency In Process* | — | Eightfold bug-bounty mailbox (AG) |
+
+**Oracle's contractual baseline (first-hand).** The *Oracle Cloud Hosting and Delivery Policies*, v3.12 (May 2026), state [FACT, [[21]][s21]]:
+- a "Target Service Uptime of 99.9%", measured monthly and excluding defined downtime;
+- security logs in a SIEM "retained online for a minimum of 1 year";
+- backups "typically retained … for a period of at least 60 days";
+- SOC 1 and/or SOC 2 reports provided under confidentiality;
+- regular penetration and vulnerability testing;
+- advance notice for maintenance.
+
+**[INFERENCE]** This is the shape of contractual commitment enterprise buyers expect in writing, whatever the vendor.
+
+**Standards context.**
+- SOC 2 is the AICPA's Trust Services Criteria report. Oracle's compliance page describes it and links the AICPA [FACT, [[20]][s20]].
+- ISO/IEC 27001:2022 certificates are commonly requested by EU buyers [UNVERIFIED, [[75]][s75]].
+- The EU **Cyber Resilience Act** (Regulation (EU) 2024/2847) introduces vulnerability-handling and reporting obligations for products with digital elements. Reporting duties apply from 11 September 2026 and most obligations from 11 December 2027. There is a lighter regime for open-source "stewards" [UNVERIFIED, [[70]][s70]].
+
+  **[INFERENCE]** The CRA is directly relevant to how OpenCATS 2.0 is *distributed* and *commercialised* in the EU: SBOM, vulnerability handling and security updates. Legal review is required; this is not legal advice.
+
+**Public sector.** FedRAMP is a genuine gate for US federal buyers, and the recruiting incumbents there are HCM suites and specialist public-sector vendors [FACT, [[19]][s19]]. **[INFERENCE]** For an open-source product, the realistic public-sector routes are:
+- self-hosting inside an agency's own authorised environment; or
+- a partner's FedRAMP-authorised hosting.
+
+FedRAMP should not be an early product goal.
+
+**OpenCATS.** As downloadable software it cannot hold SOC 2 or ISO certificates; a *hosting operator* can. The software must still *enable* the operator's and customer's controls:
+- encryption and key handling;
+- logging;
+- access control;
+- backups;
+- a secure SDLC.
+
+Today it fails basic hygiene: MD5, no CSRF, XSS, unauthenticated candidate overwrite (SEC-001/004/005/024), broken backups (DB-005) and a broken release artefact (RISK-010). The only disclosure channel is a private e-mail in `Security.MD:7`, which also states "OpenCATS uses MD5 hashing" (`Security.MD:11`) [FACT].
+
+### 5.3 Privacy & regulatory requirements (not legal advice)
+
+Every legal statement in this subsection is **[UNVERIFIED]**: the primary sources were unreachable this session (§2.4). Primary-source links are given for verification. Counsel must confirm scope, thresholds and current status.
+
+#### 5.3.1 GDPR / UK GDPR
+- **Obligations that translate into product requirements** (Regulation (EU) 2016/679 [[54]][s54]):
+  - lawful basis and consent (Art. 6–7);
+  - special-category data such as ethnicity, health/disability and, in some contexts, gender identity (Art. 9);
+  - transparency at collection (Art. 13–14);
+  - access and portability (Art. 15, 20);
+  - erasure (Art. 17);
+  - automated decision-making (Art. 22);
+  - data protection by design (Art. 25);
+  - processor contracts (Art. 28);
+  - records of processing (Art. 30);
+  - security (Art. 32);
+  - breach notification (Art. 33);
+  - DPIAs (Art. 35);
+  - international transfers (Ch. V). The EU–US Data Privacy Framework is one transfer route [[71]][s71].
+
+  The UK GDPR mirrors these (ICO guidance [[55]][s55]). The **Data (Use and Access) Act 2025** amended parts of UK data law, including subject-access searches and automated decision-making rules; its commencement dates must be checked [[81]][s81].
+- **How the market implements it** [FACT]:
+  - Greenhouse separates consent for **processing**, **retention** and **demographic data**; configures a **retention period in days** per GDPR rule; anonymises by field group; and emits an **anonymized** webhook [[12]][s12] [[13]][s13] [[10]][s10] [[14]][s14].
+  - Lever records `consent.store` and `consent.marketing` against a `compliancePolicyId`, and uses applicant IP "for detecting country for compliance reasons" [[16]][s16].
+  - SmartRecruiters exposes consent-request APIs with "single" or "separated" consent per product scope [SOURCE CLAIM · aggregator, [[40]][s40]].
+- **[INFERENCE]** The market pattern is a **policy engine**:
+  - jurisdiction → legal basis → consent purposes → retention clock (from application or last activity) → reminder/re-consent → anonymise.
+
+  Anonymisation is **field-selective**, so aggregate reporting and legally required records (§5.3.3) survive erasure.
+
+#### 5.3.2 CCPA / CPRA (California)
+- The employee/applicant partial exemption expired on **1 January 2023**. Job applicants who are California residents therefore hold CCPA rights (notice at collection, access, deletion, correction, limiting use of sensitive personal information) against covered businesses (Cal. Civ. Code §1798.100 et seq.; CPPA regulations [[56]][s56]).
+- The CPPA's regulations on automated decision-making technology, risk assessments and cybersecurity audits were finalised in 2025, with phased compliance dates. The ADMT provisions reach "significant decisions", including employment [[56]][s56].
+- **[INFERENCE]** Most other US state comprehensive privacy laws exclude data processed in an employment/applicant context. California is the main US driver for applicant privacy tooling. Verify per state.
+
+#### 5.3.3 US EEO / OFCCP recordkeeping and self-identification
+- **Title VII employers generally.** 29 CFR 1602.14 requires employers to preserve personnel or employment records, *including application forms*, for **one year** from the making of the record or the personnel action, whichever is later. When a charge is filed, records must be kept until final disposition [[49]][s49].
+- **UGESP.** 29 CFR part 1607 (Uniform Guidelines) expects users of selection procedures to keep data on adverse impact by race, sex and ethnic group [[50]][s50].
+- **EEO-1.** Filed for **employees**, not applicants, by private employers above the EEOC's size thresholds [[53]][s53].
+- **Federal contractors (EO 11246): verification requested for 41 CFR 60-1.12.**
+  - Per 41 CFR 60-1.12(a), contractors must preserve personnel and employment records for **not less than two years** from the making of the record or the personnel action, whichever is later. The period is **one year** if the contractor has **fewer than 150 employees** or does not have a Government contract of at least **$150,000** [[45]][s45].
+  - The records include those on **Internet Applicants**, defined in 41 CFR 60-1.3 [[46]][s46], and the contractor must identify, where possible, the gender, race and ethnicity of each applicant (60-1.12(c)).
+  - **Status caveat:** Executive Order 14173 (21 January 2025) **revoked EO 11246** [[47]][s47]. The Department of Labor subsequently moved to rescind the EO 11246 implementing regulations [[48]][s48]. Whether 41 CFR 60-1 still binds any contractor as of 2026-09-25 is **[UNKNOWN]**.
+- **Section 503 and VEVRAA (statutory; not affected by EO 14173).**
+  - Contractors must invite applicants to self-identify:
+    - as protected veterans, pre-offer and post-offer (41 CFR 60-300.42 [[51]][s51]);
+    - as individuals with a disability, pre-offer and post-offer, using OFCCP's form **CC-305** (41 CFR 60-741.42 [[52]][s52]).
+  - Contractors must also keep **data-collection analysis** records (applicants, openings, hires; 60-300.44(k), 60-741.44(k)), commonly for **three years**.
+  - Any 2025–2026 amendments to these parts: **[UNKNOWN]**.
+- **California.** FEHA requires employment records, including applications, to be kept for **four years** (Cal. Gov. Code §12946 [[57]][s57]).
+- **Product implications.** [INFERENCE from the above, plus market evidence]
+  - Self-ID data must be (a) **voluntary**, (b) **stored separately from the application** and **hidden from decision-makers** (field-level permissions, ER-11), and (c) reportable in aggregate. Greenhouse models EEOC data as its own per-application object and offers job-board "compliance" questions "used by government contractors" [FACT, [[9]][s9] [[12]][s12]].
+  - **Disposition reasons** are required to produce applicant-flow and adverse-impact analysis. Greenhouse types them as "We rejected them" / "They rejected us" [FACT, [[11]][s11]].
+  - Retention must be policy-driven, with **legal hold**. Erasure must respect minimum retention floors.
+  - OpenCATS today:
+    - captures EEO, but with **wrong option values** (UX-004);
+    - stores it in plaintext and copies it into `history` (DB-011);
+    - lets any user view EEO reports and exports (SEC-022);
+    - has **no disposition reasons** (GAP-021).
+
+#### 5.3.4 Pay transparency
+| Jurisdiction (primary source) | Core product-relevant obligation (UNVERIFIED) | Effective (UNVERIFIED) |
+|---|---|---|
+| New York City: Admin Code §8-107(32) [[59]][s59] | Good-faith minimum and maximum salary in advertisements for jobs, promotions and transfers (employers with 4+ employees) | 1 Nov 2022 |
+| California: Labor Code §432.3 [[58]][s58] | Pay scale in job postings (employers with 15+ employees); pay-data record keeping. A 2025 amendment clarified "good faith estimate" | 1 Jan 2023 (amendment 1 Jan 2026) |
+| Colorado: C.R.S. §8-5-201 et seq. (EPEWA) [[60]][s60] | Compensation range and benefits description in postings; notice of promotional/career-progression opportunities | 1 Jan 2021 (expanded 2024) |
+| Washington: RCW 49.58.110 [[61]][s61] | Wage scale or salary range plus a general benefits description in postings (15+ employees); a 2025 amendment added a cure period | 1 Jan 2023 |
+| Other US states and cities (Illinois, Maryland, Minnesota, Hawaii, DC, Vermont, Massachusetts, New Jersey, Cleveland and others) | Similar posting-range laws with differing thresholds and details | 2024–2027, per jurisdiction: **[UNKNOWN] detail** |
+| EU: Directive (EU) 2023/970, Art. 5 [[62]][s62] | Applicants are entitled to information on initial pay or its range *before* the interview (e.g. in the vacancy notice); employers may **not ask about pay history**; gender-neutral vacancy notices and job titles | Transposition deadline **7 June 2026**. National transposition status per member state: **[UNKNOWN]** |
+| Canada: Ontario ESA amendments; British Columbia Pay Transparency Act [[79]][s79] | Ontario: salary range in publicly advertised postings (above a size threshold), disclosure of AI use in screening, vacancy-status disclosure. BC: pay range in postings | Ontario 1 Jan 2026; BC 1 Nov 2023 |
+
+**Market implementation** [FACT]: Greenhouse `pay_input_ranges` supports **multiple ranges per job post**, each with min/max, currency, a title such as "NYC Salary Range" and an explanatory blurb [[12]][s12]. Lever's `salaryRange` has currency, interval, min and max [[16]][s16].
+
+**OpenCATS:** `joborder.salary` is `varchar(64)` free text (`db/cats_schema.sql:807`) [FACT].
+
+**[RECOMMENDATION]** Model **pay ranges per job and per location**, with currency, interval and pay-type, rendered on the career site, in schema.org JobPosting `baseSalary` and in feeds. Add a policy check that blocks publishing a job in a covered jurisdiction without a range. Add a configurable ban on pay-history questions (ER-36).
+
+#### 5.3.5 Accessibility
+- **WCAG 2.2** [FACT, [[24]][s24]]:
+  - The W3C source says WCAG 2.2 "extends" 2.1.
+  - Content conforming to 2.2 also conforms to 2.0 and 2.1.
+  - The W3C "advises the use of WCAG 2.2 to maximize future applicability".
+  - The repo holds **9 new 2.2 success criteria**: focus not obscured (minimum and enhanced), focus appearance, dragging movements, target size (minimum), consistent help, redundant entry, and accessible authentication (minimum and enhanced).
+  - **[INFERENCE]** *Accessible Authentication* affects login and MFA design (no cognitive-function tests; allow password managers and paste). *Redundant Entry* affects multi-step apply flows (do not re-ask for résumé data).
+- **Section 508 (US federal)** [FACT, [[26]][s26] [[27]][s27]]:
+  - The 2017 refresh harmonised the standards "with the World Wide Web Consortium (W3C) Web Content Accessibility Guidelines (WCAG 2.0)".
+  - Section508.gov recommends that vendors "generate an ACR for any ICT that's intended to be marketed to the Federal government", e.g. using a VPAT, and make it easy to find.
+  - The standards themselves are at the US Access Board [[66]][s66].
+- **EU** [UNVERIFIED]:
+  - **EN 301 549** V3.2.1 references WCAG 2.1 AA and is used in public procurement [[65]][s65].
+  - The **European Accessibility Act** (Directive (EU) 2019/882) applies from **28 June 2025** to specified consumer products and services (e.g. e-commerce, banking, e-books, transport, electronic communications) [[63]][s63].
+  - **[INFERENCE, not legal advice]** An employer's career site or ATS is **not** among the listed consumer services, and B2B software sold to employers is generally outside the EAA's consumer scope. The EAA is therefore unlikely to apply *directly* to an ATS vendor or an employer's career site. Counsel should confirm per member-state transposition.
+  - **Public-sector employers** are covered by the **Web Accessibility Directive** (EU) 2016/2102 for their websites, including job portals [[64]][s64].
+- **US employment law** [UNVERIFIED]:
+  - The ADA requires reasonable accommodation in the application process.
+  - The DOJ's 2024 ADA Title II rule sets WCAG 2.1 AA for state and local government web content, with 2026/2027 compliance dates by entity size [[67]][s67]. Any later changes: [UNKNOWN].
+- **[INFERENCE]** Candidate-facing flows at WCAG 2.1 AA are a **table stake**. WCAG 2.2 AA plus a published ACR for both candidate and recruiter UIs is an **enterprise requirement** for public-sector and many large corporate buyers.
+- **OpenCATS:** fixed-width, non-responsive UI with zero ARIA and keyboard traps (GAP-019; UX-001, UX-005, UX-009, UX-010, UX-012).
+
+#### 5.3.6 Canada and Australia (brief) [UNVERIFIED]
+- **Canada** [[79]][s79]:
+  - **PIPEDA** covers private-sector personal information in provinces without substantially similar laws, and federally regulated employers.
+  - **Québec Law 25** (amending the private-sector act P-39.1) adds privacy-by-default, privacy impact assessments for transfers outside Québec, and notice of decisions based exclusively on automated processing.
+  - **Ontario** added job-posting disclosure rules effective 2026 (see §5.3.4).
+- **Australia** [[80]][s80]:
+  - The Privacy Act's employee-records exemption covers existing employment relationships. **Job applicants are generally not covered by it**, so the Australian Privacy Principles apply to candidate data held by APP entities.
+  - 2024 amendments add automated-decision transparency requirements with a later commencement date.
+
+#### 5.3.7 AI regulation (reference only)
+See `AI_RECRUITING_LANDSCAPE.md` [[44]][s44]. Items with requirement-level impact [UNVERIFIED]:
+- **NYC Local Law 144:** bias audit and candidate notice for automated employment decision tools [[69]][s69].
+- **EU AI Act:** employment uses in Annex III(4) are high-risk. The application timeline was subject to 2025–2026 "digital omnibus" changes. *Lead-auditor note (2026-09-25):* multiple independent legal sources (Gibson Dunn, DLA Piper, Cloud Security Alliance; search excerpts) report that the Digital Omnibus on AI entered into force on 27 July 2026 and moved Annex III high-risk obligations (incl. recruitment) from 2 Aug 2026 to **2 Dec 2027** — see `MARKET_OVERVIEW.md` §4.4 and `AI_RECRUITING_LANDSCAPE.md` §2 [SOURCE CLAIM · independent · search excerpt] [[68]][s68].
+- **Colorado SB24-205:** delayed [[82]][s82].
+- California CPPA ADMT rules, and Ontario's AI-in-screening disclosure.
+
+**[FACT]** Greenhouse already logs **MCP access and tool calls** in its audit log and lets customers anonymise `match_score_reasoning` [[5]][s5] [[10]][s10]. **[INFERENCE]** AI auditability and erasure are entering the baseline product surface.
+
+### 5.4 Audit & governance
+
+| Aspect | Greenhouse [FACT, [[4]][s4] [[5]][s5]] | SmartRecruiters [SOURCE CLAIM · aggregator, [[40]][s40]] | Lever [FACT, [[18]][s18]] | Oracle (own ops) [FACT, [[21]][s21]] |
+|---|---|---|---|---|
+| Access | Audit Log API: bearer JWT valid 24 h, obtained with a Harvest key; enabled by contacting account management | `GET /audit-events` | `GET /audit_events` (Data API) | n/a (internal SIEM) |
+| Window / retention | "Prior thirty days" | "Retained at least 26 months"; default query window 7 days | U | Security logs ≥1 year online |
+| Event classes | Data create/update/destroy; Harvest API access; MCP access and tool calls; actions (e.g. "Global Email Added"). Performer: user, api_key, oauth, greenhouse_internal | 76 types: account lifecycle, authentication success and failure, password, role change, API credentials, **search**, **candidate profile opened**, personal data modified, EEO filled, merge/delete, approvals and delegation, offers, job/position changes, **report downloaded**, OAuth app access granted | U | Security events |
+| Rate limit | 50 req / 10 s; paginated 3 / 30 s | U | U | — |
+| Tier | Pro "full audit log" per independent guides [[35]][s35] (IX) | U | U | — |
+
+- **[INFERENCE]** The enterprise bar has three parts:
+  1. A customer-visible log that includes **reads of sensitive data** (profile opened, search, export or report download), admin and permission changes, authentication events, and API/agent access.
+  2. **Retention of at least one year** (SmartRecruiters' 26 months exceeds this; Greenhouse's 30-day API window implies customers must stream to a SIEM).
+  3. **Export/streaming.**
+
+  ASVS 16.1.1–16.3.1 supplies the engineering requirements: a log inventory with retention, who/what/when/where metadata, and all authentication operations logged [FACT, [[28]][s28]].
+- **Sandbox** [ER-43]:
+  - Lever documents sandbox accounts for OAuth integrators [FACT, [[18]][s18]].
+  - Greenhouse's Pro tier reportedly includes a "developer sandbox with sandbox sync" [SOURCE CLAIM · independent · search excerpt, [[35]][s35]].
+  - SmartRecruiters "SmartSandbox" was reported in a March 2026 release [SOURCE CLAIM · vendor · search excerpt (sibling notes), [[43]][s43]].
+- **Change management** [ER-44]: Greenhouse keeps dated changelogs in its API docs. Its Harvest pages carry the banner "The Harvest v1/v2 API is deprecated and will be removed on August 31, 2026. Please migrate to Harvest v3" [FACT, [[15]][s15]]. **[INFERENCE]** Even established vendors force API migrations. OpenCATS 2.0 should publish a versioning and deprecation policy from v1 (API-001 recommendation: `/api/v1`, `Deprecation`/`Sunset` headers).
+- **OpenCATS:** `history` is partial, mutable and deleted with parent records; there is no view, export or admin audit (GAP-011; DB-016; SEC-022).
+
+### 5.5 Integration & extensibility
+- **APIs and webhooks** [FACT, [[6]][s6] [[14]][s14] [[16]][s16] [[18]][s18]]:
+  - **Greenhouse** ships separate APIs: Harvest (general data, export-oriented), Job Board, Candidate Ingestion, Assessment, Onboarding, Audit Log and webhooks.
+    - Webhooks are HMAC-SHA256 signed, retried up to 7 times over 15 hours, and cover candidate, application, offer, job, job-post, interview and organisation events.
+    - Harvest rate limits are signalled through `X-RateLimit-*` headers per 10-second window, with `Retry-After` on 429.
+  - **Lever** has a public Postings API with global and EU hosts, an application-POST limit of 2 requests per second, and dedupe by e-mail.
+    - The OAuth Data API covers opportunities, applications, archive reasons, audit events, feedback, interviews, offers, panels, postings, referrals, requisitions (with custom fields), users and webhooks.
+- **Lever rate-limit headers.** Per an aggregator's transcription of Lever docs and a live probe, the Data API is 10 requests per second with a burst of 20 and returns **no rate-limit headers** [SOURCE CLAIM · aggregator, [[42]][s42]]. **[INFERENCE]** Publishing standard `RateLimit` headers is a cheap differentiator.
+- **HRIS hand-off:**
+  - Oracle positions Recruiting as "natively part of Oracle Cloud HCM" [FACT, [[22]][s22]].
+  - SAP's post-acquisition plan for SmartRecruiters phases user sync, job sync and then hire sync to Employee Central [SOURCE CLAIM · vendor · search excerpt (sibling notes), [[43]][s43]].
+  - **[INFERENCE]** For a standalone ATS, standard connectors or events to HRIS (a hired event plus position/requisition sync) are table stakes for corporate talent acquisition.
+- **Marketplace sizes** claimed by vendors could not be verified this session [UNKNOWN].
+- **OpenCATS:** no REST API, tokens, webhooks or events. Extensibility is `eval` hooks, and job feeds are partly broken (API-001, API-012, API-016, API-017; GAP-004; FEAT-015).
+
+### 5.6 Scale & operations
+- **Oracle Recruiting** [FACT, [[22]][s22]]:
+  - personalised career sites;
+  - account-less apply ("just an email or phone number");
+  - mobile and SMS;
+  - hiring events and "high-volume interview coordination";
+  - résumé extraction "in more than 20 languages";
+  - LinkedIn integrations and "Direct Apply" on partner sites.
+- **Greenhouse** restricts **tiered offices/departments** to Advanced/Expert packages, and `external_id` (used for HRIS mapping) to Expert [FACT, [[3]][s3]]. **[INFERENCE]** Org-hierarchy depth is itself an enterprise gate.
+- **Uptime:** only Oracle's 99.9% target was verified [FACT, [[21]][s21]]. Other vendors' SLAs are typically contractual and not public [UNKNOWN].
+- **Success services:** Workday's FedRAMP listing mentions "Workday Success Plans, a subscription-based success package" [FACT, [[19]][s19]].
+- **OpenCATS:** single-site careers portal; vestigial multi-tenancy; English-only; no currency; MyISAM scaling limits (FEAT-011; DB-012; GAP-020; UX-015; RISK-015).
+
+### 5.7 Procurement signals
+- **Security questionnaires.** Vendor-risk teams typically send SIG (Shared Assessments) or CSA CAIQ questionnaires; higher education uses HECVAT [UNVERIFIED, [[76]][s76] [[78]][s78]]. Oracle's compliance page describes CSA STAR as based on the Cloud Controls Matrix plus SOC 2 and ISO/IEC 27001 controls, and an AI-CAIQ aligned to ISO/IEC 42001 [FACT, [[20]][s20]].
+- **Accessibility evidence:** an ACR/VPAT [FACT: Section508.gov guidance, [[26]][s26]]. GSA also offers an ACR editor and the machine-readable OpenACR format [FACT, [[26]][s26]].
+- **Contractual documents:** DPA, SLA, security addendum, subprocessor list, and sector addenda. Oracle publishes **contract checklists** for DORA, EBA outsourcing guidelines, UK regulations and others, plus a NIS2 advisory [FACT, [[20]][s20]]. **[INFERENCE]** Regulated buyers, especially financial services, push operational-resilience terms down to HR SaaS providers.
+- **[INFERENCE]** Being open source helps some procurement items (code transparency, no lock-in, self-hosted residency). It does **not** replace a security evidence pack. That pack comprises an architecture and data-flow description, a pentest summary, a vulnerability disclosure policy, an SBOM, signed releases, a hardening guide, a list of logging events and an ACR. Enterprises will expect it from OpenCATS 2.0 or from its commercial steward.
+
+---
+## 6. Minimum enterprise-ready bar for OpenCATS 2.0 [RECOMMENDATION]
+
+Everything in this section is **[RECOMMENDATION]**. The bar is split into three levels:
+- **Bar 0** is the precondition for operating at all.
+- **Bar 1** is the minimum for an enterprise to *evaluate* OpenCATS 2.0 without being disqualified at security or privacy review.
+- **Bar 2** is required to *compete* in enterprise deals.
+
+The product-capability items apply to the **software** whether self-hosted or hosted. The hosted-service column applies only if the project or a steward offers SaaS.
+
+### 6.1 Bar 0: safe to operate (legacy containment, `RECOMMENDED_ROADMAP.md` Phase 1)
+Close the Phase 0 CRITICAL findings:
+- the unauthenticated candidate overwrite (SEC-024);
+- MD5 passwords and the `admin`/`admin` default (SEC-001/003);
+- CSRF and session fixation (SEC-004/007);
+- attachment IDOR and inline HTML serving (SEC-008/009);
+- the merge corruption bug (DB-001);
+- the Resfly data egress (RISK-005);
+- the broken backups (DB-005).
+
+Until Bar 0 is met, no enterprise requirement below is meaningful.
+
+### 6.2 Bar 1: enterprise-evaluable (target for the first OpenCATS 2.0 GA)
+| # | Capability (minimum) | ER refs | Closes (Phase 0) |
+|---|---|---|---|
+| 1 | **OIDC and SAML 2.0 SSO**, including SP- and IdP-initiated flows, SSO enforcement and a break-glass admin. **Not paywalled** (consistent with `PRICING_AND_PACKAGING.md` §7.1) | ER-01, ER-02, ER-05 | GAP-001, API-016 |
+| 2 | **MFA** for local accounts: TOTP plus **WebAuthn/passkeys**, admin-enforceable. Argon2id/bcrypt with rehash-on-login. Tokenised reset. Throttling and lockout | ER-04, ER-07 | SEC-001/002/014 |
+| 3 | **Session policy** defaults aligned to NIST 800-63B-4 AAL2 (≤24 h absolute, ≤1 h idle), admin-configurable. Session revocation and ID rotation | ER-06 | SEC-007, SEC-021 |
+| 4 | **RBAC v1**: predefined persona roles (admin, recruiter, coordinator, hiring manager, interviewer, external/agency); **per-job team roles**; **confidential jobs**; **field classes** masked by permission (EEO/demographic, compensation/offer, private notes). All enforced in the API/service layer (ASVS 8.2.1–8.3.1) | ER-08, ER-10, ER-11 | GAP-003, GAP-010, SEC-013, SEC-022, SEC-026 |
+| 5 | **Append-only audit log**: authentication, admin/permission changes, data create/update/delete, **sensitive reads** (profile, EEO, attachment download), searches/exports/report downloads, API-token and agent access. Retention ≥1 year by default. API export and a syslog/JSON stream for SIEM | ER-40, ER-41 | GAP-011, DB-016 |
+| 6 | **Privacy lifecycle**: consent per purpose (processing, retention/talent pool, marketing, demographics) with policy version and jurisdiction; retention schedules with automated **field-selective anonymisation**; DSAR export (JSON plus files); erasure that cascades to history, e-mail, attachments, search index and webhooks; legal hold | ER-25–ER-29, ER-33 | GAP-002, DB-011, DB-013 |
+| 7 | **US compliance module**: voluntary EEO self-ID stored separately and hidden from reviewers; VEVRAA/Section 503 invitation support (pre- and post-offer, form versioning); **required, typed disposition reasons**; applicant-flow and adverse-impact exports. Rules held as **configurable jurisdiction packs**, because the regulations are in flux | ER-30–ER-32 | GAP-021, UX-004, SEC-022 |
+| 8 | **Structured pay ranges** per job and location (min, max, currency, interval) on the career site, in JSON-LD and in feeds. Pay-history question guard | ER-35, ER-36 | DB-014 (salary as text) |
+| 9 | **Accessible, responsive careers site and apply flow at WCAG 2.2 AA**, and recruiter UI built on an accessible component system. Publish an **ACR (VPAT 2.x / OpenACR)** at GA | ER-37, ER-38 | GAP-019, UX-001/005 |
+| 10 | **Versioned REST API** (OpenAPI 3.1) with scoped tokens and OAuth2, published rate limits with standard headers, and a deprecation policy. **HMAC-signed webhooks** with retries and a documented event catalogue (incl. `candidate.anonymized`, `application.hired`) | ER-14, ER-44–ER-46 | GAP-004, API-001/015/017 |
+| 11 | **Data protection**: TLS everywhere, HSTS and security headers; encrypted storage guidance; application-level encryption for special-category fields; secrets outside config | ER-18 | SEC-015, SEC-018, DB-011 |
+| 12 | **Operability**: tested backup/restore, a documented RPO/RTO for reference deployments, health and metrics endpoints | ER-23 | DB-005, RISK-008, RISK-020 |
+| 13 | **Security evidence pack**: public VDP with safe harbour and a security.txt; independent pentest before GA with a published summary; SBOM and **signed releases**; security advisories/CVE process; hardening guide; logging inventory; data-flow diagram; pre-filled SIG Lite/CAIQ answers for the reference deployment. Plan CRA readiness (legal review) | ER-17, ER-24, ER-62 | RISK-010, RISK-014, `Security.MD` |
+| 14 | **Data export**: full, ACL-checked export via API, and bulk export of attachments | ER-42 | API-020, DB-005 |
+
+**Hosted offering (only if one is launched).** It needs, in addition:
+- SOC 2 Type II (a Type I at launch is a common bridge; [INFERENCE]);
+- a DPA with SCCs/UK addendum;
+- a public subprocessor list with change notice;
+- at least **EU and US regions**;
+- a status page;
+- a contractual uptime target (Oracle's published 99.9% target is one market reference point);
+- incident and breach notification terms.
+
+(ER-15, ER-19, ER-20, ER-21, ER-59)
+
+### 6.3 Bar 2: enterprise-competitive (post-GA roadmap)
+- **SCIM 2.0**, including group-to-role mapping. The market gates SCIM in paid tiers; OpenCATS could differentiate by including it. (ER-03)
+- **Custom roles**, **rule-based record scoping** by office/department/business unit (the equivalent of Greenhouse's "future job permissions"), and **delegated admin** with an escalation guard. (ER-09, ER-10, ER-13)
+- **Approval chains** for requisitions and offers: sequential groups, quorum, delegation, full audit trail. (ER-12)
+- Sandbox tooling: seeded non-production instances and configuration export/import. (ER-43)
+- **SIEM connectors**. (ER-41)
+- A **BI/warehouse connector**. (ER-52)
+- **HRIS connectors**, prioritised by the target segment (ADR 1F-1). (ER-47)
+- Calendar and e-mail sync. (ER-49)
+- Job-board and multiposting adapters. (ER-48)
+- Partner APIs for assessments, background checks and e-signature. (ER-50)
+- **Multi-entity / multi-brand** career sites, **i18n** (UI and candidate content), multi-currency. (ER-55–ER-57)
+- **Global demographic question packs** (ER-34) and **AI governance hooks**: notice, alternative process, human review, decision logs, bias-audit exports, audited agent/MCP access. (ER-39, ER-54)
+- ISO/IEC 27001 (plus 27701) for any hosted operation; the full ACR, including the admin UI; and a public-sector strategy via self-hosting or partners. **FedRAMP is not recommended as a product goal** before clear demand. (ER-16, ER-22, ER-38)
+
+### 6.4 Design principles implied by the evidence
+1. **Security and compliance baselines are not upsells.** Market gating is mixed: Ashby includes SSO everywhere, while Greenhouse gates SCIM and audit depth. OpenCATS' open-source position argues for free safety features, with paid value (if any) in scale and governance automation (`PRICING_AND_PACKAGING.md` §7.1).
+2. **Compliance as configurable policy.** Jurisdiction packs should be data, not code. The legal baseline has moved within 18 months: EO 11246 revoked, EU pay-transparency deadline passed, AI-law timelines shifting (§5.3).
+3. **Authorisation and audit in the service layer**, never in templates. This is the direct lesson of SEC-026 and SEC-022.
+4. **Field-selective anonymisation plus legal hold**, so that privacy erasure and EEO/OFCCP retention can coexist.
+
+---
+
+## 7. Facts vs Inferences
+
+**Facts (read first-hand this session; see Sources for commits and URLs)**
+- Greenhouse official docs (`grnhse/greenhouse-api-docs` @271cd88) contain:
+  - user roles and job/future job permissions;
+  - a confidential-job flag;
+  - approval flows (`open_job`, `offer_job`, `offer_candidate`);
+  - per-endpoint API key permissions, and the "binary" data-access warning;
+  - rate-limit headers per 10 s;
+  - Audit Log API: 30 days, event types incl. MCP, enabled via account management;
+  - anonymize endpoint field list, incl. `match_score_reasoning` and `identity_verification` (added 2025-09-24);
+  - `candidate anonymized` webhook;
+  - GDPR consent flags and retention period in the job-board API;
+  - `pay_input_ranges`;
+  - EEOC and demographic-data objects;
+  - typed rejection reasons;
+  - HMAC webhooks with 7 retries over 15 h;
+  - tiered offices restricted to Advanced/Expert;
+  - the Harvest v1/v2 removal banner for 2026-08-31.
+- Lever official repos contain:
+  - EU instance hosts;
+  - `consent.store` / `consent.marketing` / `compliancePolicyId`;
+  - `salaryRange`;
+  - a limit of 2 application POSTs per second;
+  - a Data API resource list incl. audit events, requisitions, offers and webhooks;
+  - sandbox accounts;
+  - an Employ VDP with **no bug bounty**.
+- FedRAMP Marketplace data (2026-09-25) records authorisations for:
+  - Workday Government Cloud (incl. Recruiting);
+  - Oracle Fusion Cloud (incl. recruiting);
+  - SAP NS2 (incl. SuccessFactors Recruiting);
+  - Avature, Eightfold, HireVue, NEOGOV, Yello and Monster MHME.
+
+  It shows no listing for Greenhouse, Lever, Ashby, SmartRecruiters, Workable or iCIMS.
+- Oracle Hosting and Delivery Policies v3.12 (May 2026): 99.9% target uptime, security logs ≥1 year, backups ≥60 days, SOC 1/2 under NDA, pentesting. Oracle's region page: 50+ regions in 28 countries, plus sovereign and government clouds. Oracle Recruiting page: the features cited.
+- NIST SP 800-63B-4 (final): the AAL reauthentication and phishing-resistance text quoted in §5.1.
+- WCAG 2.2: its relation to 2.1/2.0 and its 9 new success criteria.
+- Section508.gov: ACR guidance and WCAG 2.0 harmonisation.
+- OWASP ASVS 5.0.0 (May 2025): requirements 8.2.1–8.3.1 and 16.x.
+- OpenCATS state: per Phase 0 IDs, plus `Security.MD:7,11` and `db/cats_schema.sql:807`.
+
+**Source claims (vendor or independent search excerpts; aggregators)**
+- Greenhouse SSO and SCIM tiering; Greenhouse Pro features (audit log, sandbox, session timeouts).
+- Ashby SSO, SCIM and custom-role gating.
+- SAP's completion of the SmartRecruiters acquisition, and its roadmap.
+- The SmartRecruiters audit, consent and role APIs (spec mirror).
+- Trust-page certification keywords and security.txt probes.
+- Lever and Ashby rate-limit transcriptions.
+
+**Inferences**
+- The requirement classifications (TABLE STAKE, ENTERPRISE REQUIREMENT, and so on).
+- The convergent permission-model pattern.
+- The audit-log bar (reads, ≥1 year, streaming).
+- The EAA's likely non-applicability to career sites (not legal advice).
+- The realistic public-sector route for open source.
+- The "security evidence pack" expectation.
+- The Bar 0/1/2 structure (these are recommendations).
+
+**Unverified (background knowledge; primary links given)**
+- All statements about US federal, state and city law, EU/UK law, Canada and Australia.
+- The status of EO 11246 regulations; the thresholds and dates in §5.3.
+- ISO transition dates, CRA dates, and SIG/CAIQ/HECVAT and VPAT descriptions.
+
+## 8. Unknowns
+1. **Legal status as of 2026-09-25.** Unknown items:
+   - whether 41 CFR part 60-1 (including 60-1.12 retention) has been formally rescinded, and whether any contractor obligations under it survive;
+   - any 2025–2026 changes to the Section 503 and VEVRAA regulations (60-741, 60-300), including CC-305;
+   - the current EEO-1 filing thresholds and contractor prong.
+2. **EU Pay Transparency Directive** national transposition status per member state after the 7 June 2026 deadline.
+3. **EU AI Act** high-risk applicability date after the digital-omnibus process — partially resolved: 2 Dec 2027 per multiple independent legal sources (search excerpts; see `MARKET_OVERVIEW.md` §4.4); confirm against the Official Journal text.
+4. Whether the **ADA Title II web rule** compliance dates were changed after 2024.
+5. Vendor facts that could not be seen:
+   - Lever, Workable, iCIMS, Workday, SAP and Oracle SSO/SCIM/MFA specifics and their tier gating;
+   - the permission models of Workday, iCIMS, Workable and Lever;
+   - audit-log retention for Lever, Ashby, Workable, iCIMS and Workday;
+   - vendor data-residency options other than Lever's EU instance and Oracle's regions;
+   - published SLAs other than Oracle's;
+   - VPAT/ACR availability (the Oracle ACR index returned 403);
+   - marketplace sizes;
+   - support-tier structures.
+6. **Accuracy of trust-page certifications.** Automated probes are unreliable (the Greenhouse probe shows FedRAMP, contradicted by Marketplace data). Every certification in §5.2 needs direct confirmation.
+7. How Greenhouse's legacy tiers (Essential/Advanced/Expert) map to Core/Plus/Pro for SCIM, audit log and org-hierarchy features.
+8. Whether SmartRecruiters' mirrored spec (v201911.1 label, mirrored 2026-04-01) reflects the current API, e.g. the 26-month audit retention.
+9. **OpenCATS target segment** (agency vs corporate talent acquisition) and **hosting model** (self-hosted vs SaaS). These change which Bar 1 items are CRITICAL, e.g. EEO/OFCCP for US corporate users, or hosted attestations (`EXECUTIVE_SUMMARY.md` Unknown 5; ADR 1F).
+
+## 9. Verification priorities (before external use)
+1. Primary legal texts:
+   - 41 CFR 60-1.12 / 60-1.3 and the OFCCP rescission status [[45]][s45][[46]][s46][[48]][s48];
+   - 29 CFR 1602.14 [[49]][s49];
+   - 41 CFR 60-300.42 / 60-741.42 and CC-305 [[51]][s51][[52]][s52];
+   - Cal. Gov. Code §12946 [[57]][s57];
+   - Directive 2023/970 Art. 5 and Art. 34 [[62]][s62];
+   - EAA scope [[63]][s63].
+2. Vendor identity and permission pages: Greenhouse support articles [[29]][s29]–[[31]][s31]; Ashby KB [[37]][s37][[38]][s38]; Lever, Workable and iCIMS SSO/SCIM help pages.
+3. Trust centres: certifications, subprocessor lists and DPA terms for each vendor in §5.2.
+4. Vendor ACRs/VPATs (Oracle's accessibility templates index, the Workday and SAP accessibility pages, etc.).
+
+---
+## 10. Sources
+
+All accessed **2026-09-25**. Grades: **first-hand** = read directly (repo, official GitHub repo at the stated commit, or fetched official page); **excerpt** = seen only as a search-result excerpt; **aggregator** = third-party machine-generated; **not fetched** = cited primary source that could not be reached this session (statements relying on it are [UNVERIFIED]).
+
+**OpenCATS baseline**
+1. OpenCATS Phase 0 audit, `docs/audit/`: `EXECUTIVE_SUMMARY.md`, `PRODUCT_GAPS.md`, `SECURITY_AUDIT.md`, `DATABASE_AUDIT.md`, `API_AUDIT.md`, `FEATURE_INVENTORY.md`, `UX_UI_AUDIT.md`, `RISKS.md`, `RECOMMENDED_ROADMAP.md` (this repo; first-hand)
+2. OpenCATS repo files: `Security.MD:7,11`; `db/cats_schema.sql:188-191,806-807` (this repo; first-hand)
+
+**Official vendor sources, first-hand**
+3. Greenhouse, `grnhse/greenhouse-api-docs` @271cd88 (2026-09-10), https://github.com/grnhse/greenhouse-api-docs (official developer docs; first-hand), including `source/includes/harvest/_offices.md:438-440`
+4. Greenhouse, Audit Log API introduction, https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/audit-log/_introduction.md (first-hand)
+5. Greenhouse, Audit Log API events, https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/audit-log/_events.md (first-hand)
+6. Greenhouse, Harvest API introduction (auth, key permissions, rate limiting, changelog), https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_introduction.md (first-hand)
+7. Greenhouse, Harvest Approvals, https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_approvals.md (first-hand)
+8. Greenhouse, Harvest User Permissions / User Roles / Users, https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_user_permissions.md (and `_user_roles.md`, `_users.md`) (first-hand)
+9. Greenhouse, Harvest EEOC and Demographic Data, https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_eeoc.md (and `_demographic_data.md`) (first-hand)
+10. Greenhouse, Harvest Candidates (PUT Anonymize Candidate), https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_candidates.md (first-hand)
+11. Greenhouse, Harvest Rejection Reasons and Jobs (`confidential`), https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_rejection_reasons.md (and `_jobs.md`) (first-hand)
+12. Greenhouse, Job Board API: Jobs (`data_compliance`, `pay_input_ranges`, `compliance`, demographic questions), https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/job-board/_jobs.md (first-hand)
+13. Greenhouse, Job Board API: Applications (GDPR consent fields), https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/job-board/_applications.md (first-hand)
+14. Greenhouse, Webhooks introduction (signature, retry) and candidate events (anonymized), https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/webhooks/_introduction.md (and `_candidate_events.md`) (first-hand)
+15. Greenhouse, docs layout banner ("Harvest v1/v2 … removed on August 31, 2026"), https://github.com/grnhse/greenhouse-api-docs/blob/master/source/layouts/layout.erb (first-hand)
+16. Lever, `lever/postings-api` @f61aac5 (2026-04-23), README, https://github.com/lever/postings-api/blob/master/README.md (official; first-hand)
+17. Lever / Employ Inc., Vulnerability Disclosure Policy, https://github.com/lever/postings-api/blob/master/SECURITY.md (official; first-hand)
+18. Lever, `lever/integrator-resources` @c74d96e (2025-02-27), Data API Postman collection and README, https://github.com/lever/integrator-resources (official; first-hand)
+19. FedRAMP PMO, `FedRAMP/marketplace-fedramp-gov-data` @bfcd5f4 (data `last_change` 2026-09-25, "produced_by: General Services Administration"), `data.json`, https://github.com/FedRAMP/marketplace-fedramp-gov-data (official government data; first-hand). The predecessor `GSA/marketplace-fedramp-gov-data` was deprecated on 2026-05-19.
+20. Oracle, "Cloud Compliance", https://www.oracle.com/corporate/cloud-compliance/ (vendor; fetched first-hand)
+21. Oracle, "Oracle Cloud Hosting and Delivery Policies", v3.12, effective May 2026, https://www.oracle.com/contracts/docs/ocloud_hosting_delivery_policies_3089853.pdf (vendor contract document; fetched first-hand, text extracted locally)
+22. Oracle, "Oracle Recruiting and Recruiting Booster", https://www.oracle.com/human-capital-management/recruiting/ (vendor; fetched first-hand)
+23. Oracle, "Public Cloud Regions", https://www.oracle.com/cloud/public-cloud-regions/ (vendor; fetched first-hand)
+
+**Standards and government guidance, first-hand**
+24. W3C, `w3c/wcag` @71c891a (2026-09-20), `guidelines/index.html` and `guidelines/sc/22/`, https://github.com/w3c/wcag (official W3C source; first-hand). Published spec: https://www.w3.org/TR/WCAG22/ (not fetched)
+25. NIST, SP 800-63B-4 *Digital Identity Guidelines: Authentication and Authenticator Management* (final), https://doi.org/10.6028/NIST.SP.800-63b-4; HTML at https://pages.nist.gov/800-63-4/sp800-63b.html; read via the official repo `usnistgov/800-63-4` @4f2487b, `sp800-63b/aal/index.html` (first-hand)
+26. GSA Section508.gov, "Accessibility Conformance Report (ACR)" (permalink `/sell/acr/`), source https://github.com/GSA/Section508.gov/blob/main/_pages/acquisition/2018-05-29-sell-acr.md @ee172f7 (official; first-hand)
+27. GSA Section508.gov, "Laws and Policies" (Section 508 refresh harmonised with WCAG 2.0), https://github.com/GSA/Section508.gov/blob/main/_pages/manage/2023-09-23-laws-and-policies.md (official; first-hand)
+28. OWASP, Application Security Verification Standard 5.0.0 (May 2025), `OWASP/ASVS` @2b30071, https://github.com/OWASP/ASVS/tree/master/5.0/en (V8 Authorization, V16 Security Logging read first-hand; V6/V7/V11/V12 chapter titles only)
+
+**Vendor search excerpts**
+29. Greenhouse Support, "Single sign-on (SSO) overview", https://support.greenhouse.io/hc/en-us/articles/210259723-Single-sign-on-SSO-overview (vendor; excerpt)
+30. Greenhouse Support, "Configure SCIM for Okta", https://support.greenhouse.io/hc/en-us/articles/9825388563483-Configure-SCIM-for-Okta (vendor; excerpt)
+31. Greenhouse Support, "Configure SCIM for Microsoft Entra ID", https://support.greenhouse.io/hc/en-us/articles/35654588835867-Configure-SCIM-for-Microsoft-Entra-ID (vendor; excerpt)
+
+**Independent search excerpts (leads)**
+32. JumpCloud, "Integrate with Greenhouse", https://jumpcloud.com/support/integrate-with-greenhouse (independent IdP doc; title/excerpt)
+33. Ping Identity, "Configuring SAML SSO with Greenhouse and PingOne", https://docs.pingidentity.com/configuration_guides/greenhouse/config_saml_greenhouse_p1.html (independent IdP doc; title)
+34. Stitchflow, "Greenhouse SCIM Provisioning: Pricing & Limitations", https://www.stitchflow.com/scim/greenhouse (independent vendor blog; excerpt; lead only)
+35. Independent Greenhouse pricing guides (Pin, https://www.pin.com/blog/greenhouse-pricing/; Compono, https://www.compono.com/articles/greenhouse-pricing-buyers-guide-2026) (independent/competitor; excerpt; lead only)
+
+**Phase 2 sibling material**
+36. `docs/competitive/PRICING_AND_PACKAGING.md` (Phase 2 sibling; its vendor excerpts are reused with its grades)
+37. Ashby Knowledge Base, "SSO and SCIM", https://docs.ashbyhq.com/sso-and-scim (vendor; excerpt via [36])
+38. Ashby Knowledge Base, "Manage Access Roles", https://docs.ashbyhq.com/manage-access-roles (vendor; excerpt via [36])
+39. SAP News Center, "SAP Completes Acquisition of SmartRecruiters", https://news.sap.com/2025/09/sap-completes-smartrecruiters-acquisition/ (vendor press; excerpt via [36])
+
+**Aggregators and mirrors**
+40. SmartRecruiters OpenAPI (v201911.1), third-party mirror `jentic/jentic-public-apis`, https://github.com/jentic/jentic-public-apis/tree/main/apis/openapi/smartrecruiters.com/smartrecruiters/201911.1 (aggregator mirror of vendor spec; read first-hand from sibling scratch copy)
+41. Workable API v3 OpenAPI, third-party mirror `jentic/jentic-public-apis`, https://github.com/jentic/jentic-public-apis/tree/main/apis/openapi/workable.com/main/3.0 (aggregator mirror)
+42. API Evangelist provider repositories (greenhouse-io, greenhouse, lever-co, ashby, smartrecruiters, workable, icims, workday, sap-successfactors, successfactors, eightfold), https://github.com/api-evangelist (third-party automated probes; low reliability; read from sibling scratch clones)
+
+**Sibling notes and documents**
+43. Phase 2 sibling agent working notes (scratchpad `notes_B`), recording vendor search excerpts from news.sap.com and community.sap.com about the SmartRecruiters roadmap and releases (not public; lead only)
+44. `docs/competitive/AI_RECRUITING_LANDSCAPE.md` (Phase 2 sibling; AI features and regulation detail)
+
+**Primary legal and standards sources (not fetched; statements are [UNVERIFIED])**
+45. 41 CFR 60-1.12, Record retention, https://www.ecfr.gov/current/title-41/section-60-1.12
+46. 41 CFR 60-1.3, Definitions (Internet Applicant), https://www.ecfr.gov/current/title-41/section-60-1.3
+47. Executive Order 14173, "Ending Illegal Discrimination and Restoring Merit-Based Opportunity" (21 Jan 2025), Federal Register, https://www.federalregister.gov/d/2025-02097
+48. US DOL OFCCP, https://www.dol.gov/agencies/ofccp
+49. 29 CFR 1602.14, Preservation of records made or kept, https://www.ecfr.gov/current/title-29/section-1602.14
+50. 29 CFR part 1607, Uniform Guidelines on Employee Selection Procedures, https://www.ecfr.gov/current/title-29/part-1607
+51. 41 CFR 60-300.42 (VEVRAA invitation to self-identify) and 60-300.44(k), https://www.ecfr.gov/current/title-41/section-60-300.42
+52. 41 CFR 60-741.42 (Section 503 invitation to self-identify) and 60-741.44(k); OFCCP self-ID form CC-305, https://www.ecfr.gov/current/title-41/section-60-741.42 and https://www.dol.gov/agencies/ofccp/self-id-forms
+53. EEOC, EEO data collections (EEO-1), https://www.eeoc.gov/data/eeo-data-collections
+54. Regulation (EU) 2016/679 (GDPR), https://eur-lex.europa.eu/eli/reg/2016/679/oj
+55. UK ICO, UK GDPR guidance and resources, https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/
+56. California Privacy Protection Agency, regulations (CCPA/CPRA incl. ADMT), https://cppa.ca.gov/regulations/ ; Cal. Civ. Code §1798.100 et seq.
+57. Cal. Gov. Code §12946 (FEHA record retention), https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=GOV&sectionNum=12946
+58. Cal. Labor Code §432.3 (pay scale disclosure), https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=LAB&sectionNum=432.3
+59. NYC Commission on Human Rights (NYC Admin Code §8-107(32), salary transparency), https://www.nyc.gov/site/cchr/index.page
+60. Colorado CDLE, Equal Pay for Equal Work Act (C.R.S. §8-5-201 et seq.), https://cdle.colorado.gov/dlss/equal-pay-for-equal-work-act
+61. RCW 49.58.110 (Washington job posting pay disclosure), https://app.leg.wa.gov/RCW/default.aspx?cite=49.58.110
+62. Directive (EU) 2023/970 (Pay Transparency), https://eur-lex.europa.eu/eli/dir/2023/970/oj
+63. Directive (EU) 2019/882 (European Accessibility Act), https://eur-lex.europa.eu/eli/dir/2019/882/oj
+64. Directive (EU) 2016/2102 (Web Accessibility Directive), https://eur-lex.europa.eu/eli/dir/2016/2102/oj
+65. ETSI EN 301 549 V3.2.1, https://www.etsi.org/deliver/etsi_en/301500_301599/301549/03.02.01_60/en_301549v030201p.pdf
+66. US Access Board, ICT (Section 508) standards, https://www.access-board.gov/ict/ (link as referenced by Section508.gov)
+67. US DOJ, ADA Title II web and mobile accessibility rule, https://www.ada.gov/resources/2024-03-08-web-rule/
+68. Regulation (EU) 2024/1689 (AI Act), https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+69. NYC DCWP, Automated Employment Decision Tools (Local Law 144 of 2021), https://www.nyc.gov/site/dca/about/automated-employment-decision-tools.page
+70. Regulation (EU) 2024/2847 (Cyber Resilience Act), https://eur-lex.europa.eu/eli/reg/2024/2847/oj
+71. EU–US Data Privacy Framework, https://www.dataprivacyframework.gov/
+72. IETF RFC 7643 / RFC 7644 (SCIM 2.0), https://www.rfc-editor.org/rfc/rfc7643 and https://www.rfc-editor.org/rfc/rfc7644
+73. OASIS SAML 2.0, https://docs.oasis-open.org/security/saml/v2.0/ ; OpenID Connect Core 1.0, https://openid.net/specs/openid-connect-core-1_0.html
+74. CISA, Secure by Design Pledge, https://www.cisa.gov/securebydesign/pledge
+75. ISO/IEC 27001, https://www.iso.org/standard/27001
+76. Shared Assessments SIG, https://sharedassessments.org/sig/ ; CSA STAR, https://cloudsecurityalliance.org/star/ (the CSA link is also referenced on [20])
+77. ITI, VPAT, https://www.itic.org/policy/accessibility/vpat
+78. EDUCAUSE, HECVAT, https://www.educause.edu/hecvat
+79. Canada: PIPEDA, https://laws-lois.justice.gc.ca/eng/acts/P-8.6/ ; Québec private-sector privacy act P-39.1 (Law 25 amendments), https://www.legisquebec.gouv.qc.ca/en/document/cs/P-39.1 ; Ontario Employment Standards Act, 2000, https://www.ontario.ca/laws/statute/00e41 ; British Columbia Pay Transparency Act (not linked)
+80. OAIC, Australian Privacy Principles, https://www.oaic.gov.au/privacy/australian-privacy-principles
+81. UK Data (Use and Access) Act 2025, https://www.legislation.gov.uk/ukpga/2025/18/contents (chapter number unverified)
+82. Colorado SB24-205 (Consumer Protections for Artificial Intelligence), https://leg.colorado.gov/bills/sb24-205
+
+[s1]: ../audit/PRODUCT_GAPS.md
+[s2]: ../../Security.MD
+[s3]: https://github.com/grnhse/greenhouse-api-docs
+[s4]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/audit-log/_introduction.md
+[s5]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/audit-log/_events.md
+[s6]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_introduction.md
+[s7]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_approvals.md
+[s8]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_user_permissions.md
+[s9]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_eeoc.md
+[s10]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_candidates.md
+[s11]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/harvest/_rejection_reasons.md
+[s12]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/job-board/_jobs.md
+[s13]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/job-board/_applications.md
+[s14]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/includes/webhooks/_introduction.md
+[s15]: https://github.com/grnhse/greenhouse-api-docs/blob/master/source/layouts/layout.erb
+[s16]: https://github.com/lever/postings-api/blob/master/README.md
+[s17]: https://github.com/lever/postings-api/blob/master/SECURITY.md
+[s18]: https://github.com/lever/integrator-resources
+[s19]: https://github.com/FedRAMP/marketplace-fedramp-gov-data
+[s20]: https://www.oracle.com/corporate/cloud-compliance/
+[s21]: https://www.oracle.com/contracts/docs/ocloud_hosting_delivery_policies_3089853.pdf
+[s22]: https://www.oracle.com/human-capital-management/recruiting/
+[s23]: https://www.oracle.com/cloud/public-cloud-regions/
+[s24]: https://github.com/w3c/wcag
+[s25]: https://pages.nist.gov/800-63-4/sp800-63b.html
+[s26]: https://github.com/GSA/Section508.gov/blob/main/_pages/acquisition/2018-05-29-sell-acr.md
+[s27]: https://github.com/GSA/Section508.gov/blob/main/_pages/manage/2023-09-23-laws-and-policies.md
+[s28]: https://github.com/OWASP/ASVS/tree/master/5.0/en
+[s29]: https://support.greenhouse.io/hc/en-us/articles/210259723-Single-sign-on-SSO-overview
+[s30]: https://support.greenhouse.io/hc/en-us/articles/9825388563483-Configure-SCIM-for-Okta
+[s31]: https://support.greenhouse.io/hc/en-us/articles/35654588835867-Configure-SCIM-for-Microsoft-Entra-ID
+[s32]: https://jumpcloud.com/support/integrate-with-greenhouse
+[s33]: https://docs.pingidentity.com/configuration_guides/greenhouse/config_saml_greenhouse_p1.html
+[s34]: https://www.stitchflow.com/scim/greenhouse
+[s35]: https://www.pin.com/blog/greenhouse-pricing/
+[s36]: PRICING_AND_PACKAGING.md
+[s37]: https://docs.ashbyhq.com/sso-and-scim
+[s38]: https://docs.ashbyhq.com/manage-access-roles
+[s39]: https://news.sap.com/2025/09/sap-completes-smartrecruiters-acquisition/
+[s40]: https://github.com/jentic/jentic-public-apis/tree/main/apis/openapi/smartrecruiters.com/smartrecruiters/201911.1
+[s41]: https://github.com/jentic/jentic-public-apis/tree/main/apis/openapi/workable.com/main/3.0
+[s42]: https://github.com/api-evangelist
+[s43]: #10-sources
+[s44]: AI_RECRUITING_LANDSCAPE.md
+[s45]: https://www.ecfr.gov/current/title-41/section-60-1.12
+[s46]: https://www.ecfr.gov/current/title-41/section-60-1.3
+[s47]: https://www.federalregister.gov/d/2025-02097
+[s48]: https://www.dol.gov/agencies/ofccp
+[s49]: https://www.ecfr.gov/current/title-29/section-1602.14
+[s50]: https://www.ecfr.gov/current/title-29/part-1607
+[s51]: https://www.ecfr.gov/current/title-41/section-60-300.42
+[s52]: https://www.ecfr.gov/current/title-41/section-60-741.42
+[s53]: https://www.eeoc.gov/data/eeo-data-collections
+[s54]: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+[s55]: https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/
+[s56]: https://cppa.ca.gov/regulations/
+[s57]: https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=GOV&sectionNum=12946
+[s58]: https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=LAB&sectionNum=432.3
+[s59]: https://www.nyc.gov/site/cchr/index.page
+[s60]: https://cdle.colorado.gov/dlss/equal-pay-for-equal-work-act
+[s61]: https://app.leg.wa.gov/RCW/default.aspx?cite=49.58.110
+[s62]: https://eur-lex.europa.eu/eli/dir/2023/970/oj
+[s63]: https://eur-lex.europa.eu/eli/dir/2019/882/oj
+[s64]: https://eur-lex.europa.eu/eli/dir/2016/2102/oj
+[s65]: https://www.etsi.org/deliver/etsi_en/301500_301599/301549/03.02.01_60/en_301549v030201p.pdf
+[s66]: https://www.access-board.gov/ict/
+[s67]: https://www.ada.gov/resources/2024-03-08-web-rule/
+[s68]: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+[s69]: https://www.nyc.gov/site/dca/about/automated-employment-decision-tools.page
+[s70]: https://eur-lex.europa.eu/eli/reg/2024/2847/oj
+[s71]: https://www.dataprivacyframework.gov/
+[s72]: https://www.rfc-editor.org/rfc/rfc7644
+[s73]: https://docs.oasis-open.org/security/saml/v2.0/
+[s74]: https://www.cisa.gov/securebydesign/pledge
+[s75]: https://www.iso.org/standard/27001
+[s76]: https://sharedassessments.org/sig/
+[s77]: https://www.itic.org/policy/accessibility/vpat
+[s78]: https://www.educause.edu/hecvat
+[s79]: https://laws-lois.justice.gc.ca/eng/acts/P-8.6/
+[s80]: https://www.oaic.gov.au/privacy/australian-privacy-principles
+[s81]: https://www.legislation.gov.uk/ukpga/2025/18/contents
+[s82]: https://leg.colorado.gov/bills/sb24-205
