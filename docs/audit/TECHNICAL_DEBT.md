@@ -1,6 +1,6 @@
 # OpenCATS: Technical Debt and Code Quality Assessment
 
-**Scope.** This document measures the technical debt in the OpenCATS repository (`/home/user/OpenCATS`, HEAD `d607279`, CATS 0.9.x lineage, `CATS_VERSION` `0.9.7.4` at `constants.php:45`). It covers code size and structure, complexity, coupling, duplication, debt markers, compatibility with PHP 8.x, architecture debt, documentation debt, and build and tooling debt. It ends with a hotspot analysis and a debt register. Every number comes from read-only commands over the tracked files, and the commands are listed below. Security, database, performance and API behaviour appear here only where they are also code-quality debt. Other documents in `docs/audit/` cover those topics in depth, and this document cross-references their IDs (SEC-, DB-, PERF-, ARCH-, API-).
+**Scope.** This document measures the technical debt in the OpenCATS repository (`/home/user/OpenCATS`, code at commit `d607279`, CATS 0.9.x lineage, `CATS_VERSION` `0.9.7.4` at `constants.php:45`). It covers code size and structure, complexity, coupling, duplication, debt markers, compatibility with PHP 8.x, architecture debt, documentation debt, and build and tooling debt. It ends with a hotspot analysis and a debt register. Every number comes from read-only commands over the tracked files, and the commands are listed below. Security, database, performance and API behaviour appear here only where they are also code-quality debt. Other documents in `docs/audit/` cover those topics in depth, and this document cross-references their IDs (SEC-, DB-, PERF-, ARCH-, API-).
 
 ---
 
@@ -17,7 +17,7 @@
 | **Test code** | `src/OpenCATS/Tests/`, `modules/tests/`, `test/` | 27 | 7,042 |
 | **Templates** | `git ls-files '*.tpl'` (these are PHP templates) | 136 | 16,914 |
 
-`vendor/` is not present in the checkout (it is git-ignored, `.gitignore:9,13`), and no `composer install` was run.
+`vendor/` is not present in the checkout (it is git-ignored, `.gitignore:7,13`), and no `composer install` was run.
 
 ### Commands run (all read-only)
 
@@ -62,7 +62,7 @@ diff -w modules/candidates/Error.tpl modules/*/Error.tpl
 # Churn (history is read-only; the clone is shallow)
 git rev-parse --is-shallow-repository          # -> true (boundary commit 8ad6c59, 2022-07-07)
 git log --format= --name-only | sort | uniq -c | sort -rn | head -40
-git log --format= --name-only 8ad6c59..HEAD | grep . | sort | uniq -c | sort -rn   # excludes the grafted root
+git log --format= --name-only 8ad6c59..d607279 | grep . | sort | uniq -c | sort -rn   # excludes the grafted root
 ```
 
 ### Limitations
@@ -70,6 +70,7 @@ git log --format= --name-only 8ad6c59..HEAD | grep . | sort | uniq -c | sort -rn
 - **Shallow history.** The repository has 57 commits, from 2022-07-07 (grafted boundary `8ad6c59`) to 2026-01-26. Churn therefore covers only about 3.5 years. The boundary commit lists every file once in `git log --name-only`, so the hotspot analysis excludes it. `--name-only` does not list files for merge commits.
 - **Heuristic metrics.** Function length is measured from the `function` token to the matching closing brace. Complexity is a token count. The dynamic-property detector cannot see properties declared in non-first-party parents. Clone detection finds only exact normalized 8-line windows, so it misses near-miss clones. Treat these numbers as lower bounds unless stated otherwise.
 - **No code was executed**, except the PHP one-liners above that demonstrate PHP 8.4 behaviour.
+- **Commits after `d607279`.** Commits made on this branch during the audit (`2370e79`…`de771db`) add only `docs/audit/*.md`. No code changed, and the churn figures exclude them.
 
 ---
 
@@ -233,7 +234,7 @@ These counts come from the tokenizer unless noted otherwise. "Production" exclud
 | `DatabaseConnection::getInstance()` | 110 | — | in 53 files (`lib/DatabaseConnection.php:53-75`) |
 | `new X($this->_siteID \| $siteID)` | 413 | — | 324 of them in `modules/`; `Candidates` 43, `Companies` 32, `Users` 28 |
 | include/require statements | 547 | 506 | 491 use `LEGACY_ROOT`; 35 use CWD-relative paths; 7 use variable paths; 509 distinct include edges |
-| Autoloading | — | — | Composer PSR-4 covers only `OpenCATS\` → `src/OpenCATS/` (`composer.json:10-14`); 14 namespaced files |
+| Autoloading | — | — | Composer PSR-4 covers only `OpenCATS\` → `src/OpenCATS/` (`composer.json:12-16`); 14 namespaced files |
 | `eval(` tokens | 279 | 279 | 267 are `eval(Hooks::get(...))`; +11 hook `eval`s in `.tpl` |
 | `@` error suppression | 182 | 178 | `lib/Attachments.php` 22, `lib/FileUtility.php` 16, `lib/FileCompressor.php` 13, `lib/LDAP.php` 12 |
 | `exit`/`die` | 158 | 153 | `lib/` 29, `modules/` 69, `ajax/` 44, root 7, `scripts/` 7 |
@@ -386,7 +387,7 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
 - **Impact:** Operators must keep a PHP 7.x runtime that no longer receives security fixes. Any hosting upgrade takes the application down completely. The CI pipeline (DEBT-002) hides all of this. The PHP 8 blockers overlap with ARCH-001 and PERF (§9 of PERFORMANCE_AUDIT.md).
 - **Recommendation:** Treat PHP 8 compatibility as a tracked work item with a mechanical first pass:
   1. Replace `$data{0}` with `$data[0]` at `lib/CATSUtility.php:108,122`. Better, delete `getBuild()`'s `.svn/entries` logic entirely (DEBT-022).
-  2. Delete the magic-quotes blocks at `index.php:92-107`, `ajax.php:49-60` and `QueueCLI.php:58-70`, and the checks at `lib/Attachments.php:944`, `modules/import/ImportUI.php:495` and `lib/InstallationTests.php:185`. Magic quotes has not existed since PHP 5.4.
+  2. Delete the magic-quotes blocks at `index.php:92-109` (and `stripslashes_deep` at `:83-90`), `ajax.php:49-61` and `QueueCLI.php:58-70`, and the checks at `lib/Attachments.php:944`, `modules/import/ImportUI.php:495` and `lib/InstallationTests.php:185`. Magic quotes has not existed since PHP 5.4.
   3. Swap the `implode` arguments at `lib/DataGrid.php:1292-1329`.
   4. Fix or replace the vendored libraries (DEBT-016): patch the `{}` offsets or move to maintained FPDF and graph libraries.
   5. Then run the whole tree under PHP 8.2/8.3/8.4 with `error_reporting=-1` and address the runtime deprecations listed in DEBT-003.
@@ -551,7 +552,7 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
     - So the e-mail checkbox default for the same pipeline status differs between the Job Order screen and the Candidate screen. The setting is configured in `modules/settings/EmailSettings.tpl:65-71`.
   - **Ownership-assignment e-mail block copied 8×.** It appears at `CompaniesUI.php:635,768`, `JobOrdersUI.php:840,1054`, `CandidatesUI.php:1128,1266` and `ContactsUI.php:629,761`. `diff -w` of `JobOrdersUI.php:1040-1095` against `CompaniesUI.php:755-805` differs only in entity names and placeholder tokens (`%JBOD…%` vs `%CLNT…%`).
   - **URLs built from `Host` with a hard-coded scheme, 8×.** `'http://' . $_SERVER['HTTP_HOST'] . substr($_SERVER['REQUEST_URI'], …)` appears at `lib/CATSUtility.php:295`, `CompaniesUI.php:790`, `JobOrdersUI.php:1081`, `CandidatesUI.php:1290`, `ContactsUI.php:787` and `CareersUI.php:1506,1570,1573`. This breaks under HTTPS and allows Host-header injection into e-mails.
-  - **HTML in controllers.** `CandidatesUI.php:3242-3259` builds `$eventHTML`/`$notificationHTML` strings.
+  - **HTML in controllers.** `CandidatesUI.php:3054-3080` builds `$notificationHTML` strings and `:3248-3253` builds `$eventHTML` with `sprintf('<p>An event of type <span class="bold">%s</span>…')`.
 - **Impact:** Duplication leads to inconsistent behaviour, as the e-mail default shows. Adding an API or background job would mean re-implementing controller-only rules, and each fix must be applied up to 8 times.
 - **Recommendation:**
   - Create a small service for "change pipeline status", owning `setStatus`, the openings adjustment, activity creation, event scheduling and the status e-mail, and call it from both controllers. Delete `CandidatesUI::publicAddActivityChangeStatus` as a cross-controller entry point.
@@ -574,11 +575,11 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
     - `$_SESSION['CATS']`: 373 PHP and 13 template accesses.
     - 26 of 81 `lib/*.php` files read `$_SESSION`.
     - Cross-class static calls: 1,505 in production.
-    - 21 classes use the static-only utility pattern (`private function __construct() {}`).
+    - 21 files use the static-only utility pattern (`private function __construct() {}`).
     - 413 `new X($siteID)` instantiations.
     - 0 interfaces, and 1 abstract class.
   - The code acknowledges the coupling in at least 21 FIXMEs (§1.9).
-  - `index.php:61-69` must include `Session.php` and its dependencies before `session_start()` (`:74`) so that the session object can unserialize. The comments encode include-order dependencies (`/* Depends: MRU, Users, DatabaseConnection. */`).
+  - `index.php:61-69` must include `Session.php` and its dependencies before `session_start()` (`:75`) so that the session object can unserialize. The comments encode include-order dependencies (`/* Depends: MRU, Users, DatabaseConnection. */`).
 - **Impact:**
   - Classes cannot be unit-tested in isolation. The existing unit tests cover only pure utilities (`src/OpenCATS/Tests/UnitTests/*`).
   - The design blocks CLI and queue reuse, because library methods assume a logged-in web session.
@@ -701,7 +702,7 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
 - **Severity:** MEDIUM
 - **Finding:** Errors are handled by printing HTML and calling `die()`, including inside library classes. Warnings are suppressed with `@`. Library classes `echo` markup directly. There is no exception model and no logging abstraction.
 - **Evidence:**
-  - Production first-party code has 153 `exit`/`die`. 31 are in `lib/*.php`:
+  - Production first-party code has 153 `exit`/`die` tokens, 29 of them in `lib/*.php`:
     - `lib/DatabaseConnection.php:120,135,188,219`
     - `lib/DataGrid.php:407,420,440,483,1490,2223`, e.g. `die ('defaultSortBy not set.');`
     - `lib/GraphGenerator.php:75,147,217,260,304,356,392,426`
@@ -731,18 +732,18 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
     - `lib/DefaultQuestionnaires.php` (206)
     - `lib/JavaScriptCompressor.php` (121)
     - `lib/Encryption.php` (114, uses the removed `mcrypt_*`)
-  - **Neutered licensing.** `lib/License.php` (730 LOC, 32 FIXMEs): every validation path returns `true`, e.g. `:580-590` `isLicenseValid()` returns `true` in both branches, `:658-660` `validateProfessionalKey()` returns `true`, and `:687-705` `isParsingEnabled()` returns `true` on all 4 paths. `LicenseUtility::` is still called 55×.
+  - **Neutered licensing.** `lib/License.php` (730 LOC, 32 FIXMEs): every validation path returns `true`, e.g. `:580-590` `isLicenseValid()` returns `true` in both branches, `:658-660` `validateProfessionalKey()` returns `true`, and `:687-705` `isParsingEnabled()` returns `true` on all 4 paths. `LicenseUtility::` is still referenced 36× (about 35 call sites).
   - **Hosted resume parser.** `lib/ParseUtility.php:53,60,135` is a SOAP client for `wsdl/parse.wsdl:78` `http://soap.resfly.com/parse.php`, `wsdl/status.wsdl:69` and `wsdl/keyCheck.wsdl:66` `http://catsone.com/keyCheck.php`, all over plain HTTP. It is gated by `config.php:51` `PARSING_ENABLED false`.
   - **Phone-home.** `lib/NewVersionCheck.php:109-122` POSTs `CatsVersion`, `CatsUID`, `PHPVersion`, `ServerSoftware`, `UserAgent`, `SiteName`, `activeUsers` and `licenseKey` to `www.catsone.com:80/catsnewversion.php`. It is called from `modules/home/HomeUI.php:95` and `modules/settings/SettingsUI.php:2399`, and disabled in the seeded schema (`db/cats_schema.sql:1044`, `disable_version_check` = 1).
   - **Browser toolbar module.** `modules/toolbar/ToolbarUI.php` (Monster resume capture, `storeMonsterResumeText` `:186`) has an undefined `attemptLogin` route (`:59-60`) and `_authenticationRequired = false` (`:46`).
   - **Upsell links to catsone.com.** They appear in `modules/settings/Professional.tpl` (8 links), `modules/candidates/Add.tpl:125`, `modules/import/MassImportStep1.tpl:95`, `modules/login/wizard/Reregister.tpl:20`, `modules/settings/SettingsUI.php:2721,3108,3116-3117,3151,3155-3156`, and `index.php:249` (`CATSUtility::transferURL('http://www.catsone.com')`).
-  - **Maintenance script in the web root.** `rebuild_old_docs.php` builds SQL with `addslashes` (`:37`).
+  - **Maintenance script in the web root.** `rebuild_old_docs.php` builds SQL with `addslashes` (`:38`).
   - **In-app SimpleTest runner.** `modules/tests/` (3,019 LOC) plus `lib/simpletest` (31,112 LOC). It is superseded by PHPUnit and Behat according to `CHANGELOG.MD` ("Replace deprecated simpletest with phpunit and behat #123"), yet still ships and is loaded by module discovery (DEBT-017).
 - **Impact:** About 40k LOC (including SimpleTest) to maintain, scan, and port to PHP 8 for no value. The remnants cause confusing UI, plain-HTTP outbound calls to third-party hosts if features are enabled, and extra attack surface (unauthenticated toolbar module, web-root script).
 - **Recommendation:**
   - Retire, in one PR each:
     - the 7 dead `lib/` files
-    - `License.php`/`LicenseUtility`: replace the 55 call sites with constants or removal
+    - `License.php`/`LicenseUtility`: replace the ~35 call sites with constants or removal
     - `ParseUtility` and `wsdl/`
     - `NewVersionCheck`: replace with a GitHub-releases check, or remove
     - `modules/toolbar/`
@@ -796,14 +797,14 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
 
 ---
 
-## 4. Documentation debt
+## 4. Documentation, typing and presentation debt
 
 ### DEBT-019: Documentation is stale, external or missing
 - **Severity:** MEDIUM
 - **Finding:** Before this audit the repository had no `docs/` directory. It has no architecture description, ADRs, contributor guide or API reference. The changelog stopped in 2016. Inline documentation is patchy, and much of it is placeholder text.
 - **Evidence:**
   - Top-level docs are `README.md` (965 bytes: links to the external site, forum, YouTube and issues), `README-testing.md` (CI notes), `Security.MD`, `issue_template.md`, `LICENSE.md` and `CHANGELOG.MD`.
-  - `CHANGELOG.MD`'s newest entry is `**0.9.3-3 (2016-11-22)**`, while `constants.php:45` is `0.9.7.4`. The last change to `CHANGELOG.MD` in the history window is none (the last touch is before `8ad6c59`). Releases 0.9.4–0.9.7.4 are undocumented in-repo.
+  - `CHANGELOG.MD:3`, the newest entry, is `**0.9.3-3 (2016-11-22)**`, while `constants.php:45` is `0.9.7.4`. No commit after the shallow boundary (2022-07-07) touches `CHANGELOG.MD`. Releases 0.9.4–0.9.7.4 are undocumented in-repo.
   - No ADRs, no `CONTRIBUTING`, and no coding standard. `scripts/svnkeywords.sh:20` references a `doc/DEVELOPMENT-GUIDELINES` that does not exist.
   - No API documentation for 32 AJAX endpoints (`ajax/*.php` 21 + `modules/*/ajax/*.php` 11, dispatched by `ajax.php:76-91`), the XML job feed (`xml/index.php`, `modules/xml/`), RSS or the careers portal. See API_AUDIT.md.
   - Docblock coverage of named functions (`notes/doccov.php`) is 41.4% overall: `lib/` 61%, `modules/` 8%, `src/` 1%. 141 of the docblocks and FIXMEs are "Document me" placeholders.
@@ -840,7 +841,7 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
   - The 136 templates contain 5,285 `<?php` blocks.
   - Direct `<?php echo($this->x) ?>` appears 352× versus 857 uses of the escaping helper `$this->_()`. This is an approximate pattern count; see SEC-005 for XSS impact.
   - `modules/calendar/Calendar.tpl:590-593` builds a JS array from DB values inside the template.
-  - Controllers: `modules/careers/CareersUI.php` has 152 lines with HTML tags, e.g. `:225-232`. `CandidatesUI.php:3252-3259` builds `sprintf('<p>An event of type <span class="bold">%s</span>…')`.
+  - Controllers: `modules/careers/CareersUI.php` has 152 lines with HTML tags, e.g. `:225-232`. `CandidatesUI.php:3248-3253` builds `sprintf('<p>An event of type <span class="bold">%s</span>…')`.
   - `lib/`: `TemplateUtility` has 158 `echo`s and `DataGrid` has 120. `lib/WebForm.php:1209` `getJavaScript()` is a 408-line PHP function that emits JavaScript.
   - DataGrid render strings (DEBT-005) emit HTML from `lib/Candidates.php` and `lib/JobOrders.php`, etc.
 - **Impact:** Output escaping cannot be enforced in one place, a redesign or API needs output logic extracted from three layers, and front-end changes require PHP changes (ARCH-008).
@@ -864,7 +865,7 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
     - `ci/package-code.sh:4-10` still depends on `$TRAVIS_TAG`.
     - `.travis.yml` was changed in 8 of the last 56 non-root commits, making it the most-churned file (§8). That is effort spent on a dead pipeline.
   - **Workflows that never run.** `.github/workflow/needs-reply.yml` and `.github/workflow/needs-reply-remove.yml` sit in `.github/workflow/` (singular). GitHub Actions only loads workflow files from `.github/workflows/` (external fact per GitHub documentation), so these have never run since they were added in `69de98e` and `e4e6004` (2022-09-02). `.github/no-response.yml` configures the Probot "no-response" app with a different label (`more-information-required`) than the needs-reply workflows (`needs-reply`).
-  - **Release artefact without dependencies.** The `release` job (`.github/workflows/ci.yml:106-129`) runs `zip -r opencats-$tag.zip . -x "*.git*" "docker/*" "test/*" …` without `composer install --no-dev`. `vendor/` is git-ignored (`.gitignore:9,13`), yet runtime code hard-requires it (`lib/Mailer.php:43`, `lib/Companies.php:2`, `lib/JobOrders.php:2`, `lib/TemplateUtility.php:38`, and templates load `vendor/ckeditor/ckeditor/ckeditor.js`). **INFERENCE:** tag releases produced by this job lack PHPMailer, CKEditor and the autoloader (ARCH-002). `Security.MD` states releases since 0.9.7.2 are built with dev dependencies removed. That was true of the Travis `ci/package-code.sh:3` (`composer install --no-dev`), which no longer runs.
+  - **Release artefact without dependencies.** The `release` job (`.github/workflows/ci.yml:106-128`) runs `zip -r opencats-$tag.zip . -x "*.git*" "docker/*" "test/*" …` without `composer install --no-dev`. `vendor/` is git-ignored (`.gitignore:7,13`), yet runtime code hard-requires it (`lib/Mailer.php:43`, `lib/Companies.php:2`, `lib/JobOrders.php:2`, `lib/TemplateUtility.php:38`, and templates load `vendor/ckeditor/ckeditor/ckeditor.js`). **INFERENCE:** tag releases produced by this job lack PHPMailer, CKEditor and the autoloader (ARCH-002). `Security.MD` states releases since 0.9.7.2 are built with dev dependencies removed. That was true of the Travis `ci/package-code.sh:3` (`composer install --no-dev`), which no longer runs.
   - **Manual version bumps.**
     - Commits `1ba02b1` and `5781f41` (2024-04-23) edit the version in 12 files each.
     - `1ba02b1` set `define('CATS_VERSION', '-s');` (the output of `git show 1ba02b1 -- constants.php`), most likely a mis-invocation of `scripts/newversion.sh -s` (**INFERENCE**). The next commit fixed it.
@@ -929,7 +930,7 @@ These counts cover 429 first-party `.php/.tpl/.js/.css/.sh` files.
 
 ## 8. Hotspots (size × churn × debt markers)
 
-**Churn method.** Command: `git log --format= --name-only 8ad6c59..HEAD | grep . | sort | uniq -c | sort -rn`. The raw command requested (`git log --format= --name-only | sort | uniq -c | sort -rn | head -40`) gives the same ranking plus 1 for every file, because it counts the grafted root `8ad6c59`, which lists all 1,009 files. The history window is 2022-07-07 to 2026-01-26 and holds 56 non-root commits.
+**Churn method.** Command: `git log --format= --name-only 8ad6c59..d607279 | grep . | sort | uniq -c | sort -rn`. The raw command requested (`git log --format= --name-only | sort | uniq -c | sort -rn | head -40`) gives the same ranking plus 1 for every file, because it counts the grafted root `8ad6c59`, which lists all 1,009 files. The history window is 2022-07-07 to 2026-01-26 and holds 56 non-root commits.
 
 **Most-churned files (excluding the root):**
 - `.travis.yml` 8
@@ -995,7 +996,7 @@ Effort is a **rough estimate** for one experienced PHP developer: **S** ≤ 3 da
 | DEBT-016 | Dependencies | 47,400 LOC vendored (FPDF 1.53, Artichow, SimpleTest, sphinxapi); jQuery 1.3.2; IE code | `lib/fpdf/fpdf.php:16`; `js/jquery-1.3.2.min.js` | MEDIUM | M | rewrite (Composer and maintained libs) / retire |
 | DEBT-017 | Architecture | Per-session module discovery with migrations under lock; 3 migration systems; SimpleTest loaded | `lib/ModuleUtility.php:152-156,242-282`; `modules/tests/TestsUI.php:43-46` | MEDIUM | M | refactor |
 | DEBT-018 | Tooling | No linters or analysers; dead Travis; `.github/workflow/` never runs; release zip without `vendor/`; manual versioning | `.github/workflow/*.yml`; `.github/workflows/ci.yml:119`; commit `1ba02b1` | MEDIUM | S | fix |
-| DEBT-019 | Docs | CHANGELOG stale since 2016; no ADRs, architecture or API docs; 141 "Document me"; 96% unnamed `@param` | `CHANGELOG.MD:5`; §DEBT-019 | MEDIUM | M | fix (write docs) |
+| DEBT-019 | Docs | CHANGELOG stale since 2016; no ADRs, architecture or API docs; 141 "Document me"; 96% unnamed `@param` | `CHANGELOG.MD:3`; §DEBT-019 | MEDIUM | M | fix (write docs) |
 | DEBT-020 | Quality | No types (7 typed params, 0 return types, 0 `strict_types`) | §DEBT-020 | MEDIUM | L (incremental) | refactor |
 | DEBT-021 | Presentation | HTML in controllers and `lib/`; logic in templates; opt-in escaping | `modules/careers/CareersUI.php:225-232`; `lib/WebForm.php:1209` | MEDIUM | L | refactor / rewrite views |
 | DEBT-022 | Hygiene | SVN `$Id` ×322, Cognizo ×214 files, manual version headers ×11, `.svn/entries` build check | §1.11 | LOW | S | retire |
@@ -1020,7 +1021,7 @@ Effort is a **rough estimate** for one experienced PHP developer: **S** ≤ 3 da
 **FACT (verified in code or by running PHP 8.4 in this environment):**
 - `php -l` fails on `lib/CATSUtility.php:108`, `lib/artichow/AntiSpam.class.php:63`, `lib/fpdf/fpdf.php:434`, `lib/fpdf/font/makefont/makefont.php:18`, `src/OpenCATS/Entity/JobOrderRepositoryException.php:2` and `lib/simpletest/test/test_with_parse_error.php:5`. All 139 templates pass.
 - On 8.4, `implode(array, string)` throws a TypeError and `get_magic_quotes_gpc()` is undefined (both executed as one-liners). `preg_replace("[^A-Za-z0-9]", …)` does not strip `../`, and dynamic property creation emits a deprecation.
-- All counts in §1 (LOC, tokens, clones, markers, headers, formatting) come from the listed commands over tracked files at HEAD `d607279`.
+- All counts in §1 (LOC, tokens, clones, markers, headers, formatting) come from the listed commands over tracked files at commit `d607279`.
 - `Session.php:850` assigns `$this->_`; `DataGrid.php:257` uses `=`; `Companies.php:109` catches an unimported class. The `.github/workflow/` directory exists alongside `.github/workflows/`, and the release job has no `composer install` step.
 - The 7 `lib/` files in DEBT-015 have no include or class references anywhere in tracked PHP or templates.
 
