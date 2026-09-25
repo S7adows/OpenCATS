@@ -36,6 +36,8 @@
 
 Each classification describes what **we** should do with the upstream change.
 
+**Label legend** (exact terms from the Phase 3A brief): **TAKE** = TAKE UPSTREAM CHANGE · **ADAPT** = ADAPT UPSTREAM CHANGE · **KEEP OUR** = KEEP OUR VERSION · **REBUILD** = REBUILD · **IGNORE** = IGNORE.
+
 | # | Area | Fork `d607279` | Upstream `d5cf733` (evidence) | Classification | Rationale |
 |---|---|---|---|---|---|
 | M1 | PHP runtime | Mixed PHP 5/7 code; 6 parse errors on PHP 8 (§1); `get_magic_quotes_*` fatal on PHP ≥ 8 (API-019) | `composer.json` requires `"php": "^8.4.1"`. Magic quotes, curly offsets, `create_function` and `implode` order fixed (`2326a53` #787). PHP 8 runtime modernised (`d685cff` #792). Installer fixed for PHP 8.4.1/8.5 (`eeaa82f` #840). Runtime gate in `installwizard.php:5` and `lib/InstallationTests.php:137`. No removed functions found by grep (`each`, `create_function`, `ereg`, `mysql_*`, `utf8_encode`, `strftime`) [FACT] | **TAKE UPSTREAM** | The fork cannot run on any supported PHP. Upstream parses cleanly on 8.4 |
