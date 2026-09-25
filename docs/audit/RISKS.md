@@ -62,9 +62,9 @@
 
 ### RISK-005 — Privacy and regulatory exposure
 - **Severity:** CRITICAL · **Likelihood:** High for any EU/UK/California deployment
-- **Evidence:** plaintext EEO special-category data (`db/cats_schema.sql:188-191`); no consent/retention/erasure (`PRODUCT_GAPS.md` GAP-002); deletions leave residual PII (`DATABASE_AUDIT.md` DB-011); resume text and license key sent via SOAP over HTTP to `soap.resfly.com` because `LicenseUtility::isParsingEnabled()` returns `true` on every path (`lib/License.php:687-706` — lead-verified; `wsdl/parse.wsdl:78`); daily phone-home with site name and license key (`lib/NewVersionCheck.php:98-133`).
+- **Evidence:** plaintext EEO special-category data (`db/cats_schema.sql:188-191`); no consent/retention/erasure (`PRODUCT_GAPS.md` GAP-002); deletions leave residual PII (`DATABASE_AUDIT.md` DB-011); resume text (and the license key) is sent via SOAP over plain HTTP to `soap.resfly.com` whenever a parse is triggered — candidate-add "parse" (`modules/candidates/CandidatesUI.php:895`), careers `resumeParse` (`modules/careers/CareersUI.php:524-527`), mass import (`modules/import/ImportUI.php:1374`) — **even though `config.php:51` sets `PARSING_ENABLED` to `false`**, because `LicenseUtility::getParsingStatus()` returns `true` when parsing is disabled and `isParsingEnabled()` returns `true` on every path (`lib/License.php:687-727` — lead-verified; `wsdl/parse.wsdl:78`). The phone-home version check (`lib/NewVersionCheck.php:98-133`, sends site name and license key) is disabled on a fresh install (`db/cats_schema.sql:1044`, `disable_version_check=1`) but can be enabled by admins.
 - **Impact:** Fines, breach notification duties, procurement disqualification.
-- **Recommendation:** Phase 1: disable outbound Resfly/phone-home by default; document data flows. Privacy-by-design in the new platform (GAP-002).
+- **Recommendation:** Phase 1: make `isParsingEnabled()` honour `PARSING_ENABLED` (or remove Resfly entirely) and keep the version check off; document data flows. Privacy-by-design in the new platform (GAP-002).
 
 ### RISK-006 — XSS + CSRF + missing AJAX authorization
 - **Severity:** HIGH · **Likelihood:** High
@@ -171,7 +171,7 @@ The following claims were independently re-checked by the lead auditor (commands
 | DataGrid sanitizer | `php -r 'var_dump(preg_replace("[^A-Za-z0-9]", "", "../../x/y"));'` | `"../../x/y"` (no-op) |
 | Bulk-selection bug | `lib/DataGrid.php:257-259` vs `:1988-1993` | `serialize()` encoded, `json_decode()` decoded; `if ($index = 'exportIDs')` assignment |
 | Private calendar events | `lib/Calendar.php:132-145` | No public/private predicate in SQL |
-| Parsing always enabled | `lib/License.php:687-706` | Every branch returns `true` |
+| Parsing always enabled | `lib/License.php:687-727`; call sites via `grep -rn isParsingEnabled` | Every branch returns `true`, including when `PARSING_ENABLED=false`; SOAP call made on user-triggered parse/import |
 | Release without vendor | `.github/workflows/ci.yml` release job; `lib/Mailer.php:43` | Confirmed |
 | MyISAM everywhere | `grep -o "ENGINE=..." db/cats_schema.sql` | 55 × MyISAM |
 
