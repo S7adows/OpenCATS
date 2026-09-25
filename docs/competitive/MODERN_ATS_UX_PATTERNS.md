@@ -1285,3 +1285,307 @@ Throughout, keep the status change and the scheduling in one flow, as OpenCATS d
 - Build an accessible component library (grid, board with a "Move to…" menu, dialog, forms, toasts).
 - Run automated checks (axe) in CI plus manual screen-reader passes on journeys (a)–(c) and the apply flow.
 - Publish an ACR/VPAT for OpenCATS 2.0.
+
+---
+
+## End-to-end journey benchmarks
+
+Step counts are given only where a source documents them. "Steps" means distinct user actions; "loads" (OpenCATS) means document loads as counted in `UX_UI_AUDIT.md` §2. Where no count is documented the cell says UNKNOWN. Counts assembled from several sources are marked INFERENCE.
+
+### (a) Recruiter moves a candidate through stages and schedules an interview
+
+| Product | Stage move | Scheduling initiation (recruiter/coordinator) | Candidate side | Automation that removes steps | Evidence |
+|---|---|---|---|---|---|
+| **OpenCATS today** | Per candidate: open candidate → edit icon on pipeline row (modal) → tick Change Status and pick status → Save → Close (parent reloads). Part of J3: **9 steps, about 8 loads, 12+ clicks per candidate**. No bulk or board move | Same modal: tick Schedule Event → type, MM-DD-YY date, 12-hour time, duration, title, reminder. Creates a **single-owner calendar entry with no attendees, invite or ICS** | None. The candidate receives only an optional status e-mail, which is pre-checked | None. Reminders depend on a cron that fatals on PHP 8 | [FACT] `UX_UI_AUDIT.md` J3; `FEATURE_INVENTORY.md` §2.6; FEAT-010; UX-021 |
+| **Greenhouse** | Bulk: **9 documented steps** for N candidates on the *same job* (Candidates → Bulk Actions → Filter by Job → select job → Save → tick → Edit Selected → Move to Another Stage → choose stage). Single-candidate count UNKNOWN; the stage actions sit in the profile | Send a self-schedule request or an availability request (recruiter step count UNKNOWN). Restricted to Site Admin, or Job Admin with e-mail permission | Self-schedule in **4–5 steps**: e-mail → link → date → time → Submit (plus "Next" when DE&I features are on) | Interviewer calendars are consulted for available slots | [SOURCE CLAIM · vendor · search excerpt] S7, S12, S13, S14, S15 |
+| **Greenhouse + ModernLoop (GitLab)** | Recruiter moves the candidate to Team Interview and requests availability. That creates a coordinator task | Coordinator: **about 12 documented steps** (My Tasks → Action required → Schedule now → Next: Setup Interviews → Next: Find Schedules → use schedule → e-mail template → attachment → interviewer template → Confirm and send) | Candidate submits availability. Follow-up after 24 h; after the 2nd unanswered e-mail the recruiter is informed and requests stop | Generated schedule options, auto-selected Zoom room, interviewer pools | [SOURCE CLAIM · independent · read first-hand] S76 `coordinator.md:40-47,170-184`; S78 |
+| **Teamtailor** | **1 drag gesture** per candidate on the board, across jobs | Book a meeting with several candidate-selectable slots; availability of all participants checked (step count UNKNOWN) | Picks a slot and can reschedule themselves | **Auto-move to another stage once the candidate selects a time**; stage triggers and moving rules | [SOURCE CLAIM · vendor · search excerpt] S49–S53; [FACT] S54 |
+| **Ashby** | Kanban drag or list (count UNKNOWN) | **0 recruiter steps after setup**: availability or direct-booking links are sent automatically on stage entry [INFERENCE from "sent automatically"] | Books directly, or submits availability (with a minimum-days rule) | Stage-entry auto-send | [SOURCE CLAIM · vendor · search excerpt] S28, S29, S30 |
+| **Workable** | Move to next or any stage, forward or back (count UNKNOWN) | Send a self-scheduling link. Needs Google or M365 integration | Picks a slot in their own or the interviewer's time zone; the event is created automatically | Auto-created event | [SOURCE CLAIM · vendor · search excerpt] S34, S37 |
+| **Oracle / SAP SF / Workday** | UNKNOWN | Candidate-managed schedules with slots (Oracle, with M365 availability); Outlook or SF calendar (SAP); self-schedule calendar (Workday) | Opens link → views remaining slots → chooses (SAP) | Oracle schedule templates; Workday claims AI scheduling via SMS, WhatsApp or chat | [SOURCE CLAIM · vendor · search excerpt] S66, S67, S70, S71, S72; [SOURCE CLAIM · vendor] S74 |
+
+**Comparison** [INFERENCE]
+- In OpenCATS, **effort scales linearly with candidates**, at about 8 loads each. The scheduled "interview" also reaches nobody but its owner.
+- The market has converged on three things:
+  1. Moves take one gesture or a bulk action.
+  2. Scheduling is triggered or automated at stage entry.
+  3. The candidate books, and reschedules, their own slot.
+- Coordination-heavy panels are still labour-intensive even for mature customers: about 12 coordinator steps at GitLab, and a separate tool.
+
+### (b) Interviewer submits a scorecard
+
+| Product | Steps | What the interviewer sees | Decision recorded | Evidence |
+|---|---|---|---|---|
+| **OpenCATS today** | No scorecard exists. The nearest options are (1) clicking a star on the pipeline row (1 click, no rater, image map, mouse-only), or (2) the Log Activity modal (J3 steps 6–9, about 3 loads) to write free text | Candidate Show page | A 0–5 star rating per pipeline, or free text | [FACT] `FEATURE_INVENTORY.md` §2.4; UX-005; `UX_UI_AUDIT.md` J3 |
+| **Greenhouse** | About 4–5 steps: dashboard scorecard link → interview kit → rate attributes + Key Take-Aways (+ "Note for Other Interviewers") → overall recommendation → submit [INFERENCE; exact count UNKNOWN] | Resume, interview description, scorecard, suggested questions. Peers' scorecards stay **hidden** from interviewers | Per-attribute rating (or no decision) + overall recommendation: definitely not / no / yes / strong yes / no decision | [FACT] S20; [SOURCE CLAIM · independent · read first-hand] S77, S78 |
+| **Lever** | Interviews section → "Complete Feedback" next to the interview (**2 documented steps** to reach the form; form steps UNKNOWN) | Feedback form (content UNKNOWN) | UNKNOWN | [SOURCE CLAIM · vendor · search excerpt] S24 |
+| **Teamtailor** | Open candidate card in the job → Evaluation tab → rate each skill/trait 1–5 + comments → submit (about 4 steps; submit wording UNKNOWN) | Job scorecard criteria; colleagues' evaluations for comparison (whether before or after own submission is UNKNOWN) | 1–5 per criterion. A job match score (%) is derived | [SOURCE CLAIM · vendor · search excerpt] S46, S47, S48 |
+
+**Comparison** [INFERENCE]
+- Leaders give interviewers a **pending-feedback entry point**, a **kit** in one place and a **fixed rubric plus overall recommendation**, and keep submissions independent.
+- OpenCATS captures neither structure nor who rated. Feedback therefore cannot be compared or aggregated.
+
+### (c) Hiring manager reviews candidates and approves an offer
+
+| Product | Review candidates | Offer approval | Mobile / chat | Evidence |
+|---|---|---|---|---|
+| **OpenCATS today** | No hiring-manager role. A manager needs a full user account and then follows the recruiter path: Job Orders tab → job → pipeline table → candidate Show (about 3 loads before acting), and records a decision via the J3 status modal | **None.** "Offered" (600) is only a status; there is no offer object or approval chain | Not responsive | [FACT] GAP-008, GAP-009, GAP-010; `FEATURE_INVENTORY.md` §3.1; `UX_UI_AUDIT.md` J3, UX-001 |
+| **Greenhouse** | An "Applications to Review" dashboard panel appears when candidates are in the Hiring Manager Review stage. Review happens in the profile (step count UNKNOWN) | Configurable `offer_candidate` flows: approver groups, `approvals_required` (quorum), `priority`, sequential or not. Approver UI steps UNKNOWN. **Changing only the currency forces complete re-approval** (GitLab) | UNKNOWN | [SOURCE CLAIM · vendor · search excerpt] S2–S4; [FACT] S20; [SOURCE CLAIM · independent · read first-hand] S76 |
+| **Teamtailor** | **4 documented steps**: Jobs tab (invited jobs) → job → candidates by stage ("focus on the candidates that need their attention") → candidate card, then comments, to-dos, scorecard | "Send Job offers to candidates" exists (title). Approvals UNKNOWN | UNKNOWN | [SOURCE CLAIM · vendor · search excerpt] S45 |
+| **Ashby** | Bulk application review tool for the application-review stage | UNKNOWN | UNKNOWN | [SOURCE CLAIM · vendor · search excerpt] S30, S31 |
+| **Workday / SmartRecruiters / Workable** | UNKNOWN | UNKNOWN | Workday: feedback via Teams/Slack and requisitions on mobile [SOURCE CLAIM · vendor]. SmartRecruiters and Workable: native mobile apps/dashboards with tasks and candidates to evaluate | S73; S63, S64; S33 |
+
+**Comparison** [INFERENCE]
+- Leaders **push** a small, role-scoped queue to the hiring manager and model approvals as **configurable chains with quorum**.
+- The documented weak spot is **over-triggered re-approval**.
+- OpenCATS has neither the hiring-manager surface nor the approval model, so its journey (c) cannot be completed inside the product.
+
+---
+
+## Cross-cutting principles
+
+These are [INFERENCE] from the pattern areas above, phrased as [RECOMMENDATION]s for OpenCATS 2.0. They are not market facts.
+
+1. **The application (candidate × job) is the unit of work.** Lists, boards, profiles, scorecards and timelines are organised around it (§3–§5, §10, §11).
+2. **Push work to people by role.** Home is an action queue derived from hiring-team roles; nobody should have to search for what they owe (§1, §12, §13, journeys b and c).
+3. **Configure, don't code.** Stages, dispositions, kits, approval chains, templates and career branding are edited in the UI from templates, with safe defaults, previews and history (§5, §15). This directly reverses FEAT-001 and the config.php customisation.
+4. **Automate at stage entry, visibly.** Send scheduling links, assessments and messages when a candidate enters a stage, and auto-advance on outcomes, always showing what will happen and allowing override (§5, §9). Never send candidate e-mail by default without an explicit choice (UX-021).
+5. **Structured, independent evidence before decisions.** Kits, rubrics, an overall recommendation, blind-until-submitted feedback and a summary for the decider (§10).
+6. **One list component everywhere.** URL state, per-user columns, saved views (private/shared, "Save as"), board/list parity and a contextual bulk bar (§3, §7, §8).
+7. **Bulk actions must be correct, previewable and auditable.** Use a server-side selection model, a side-effect summary, asynchronous progress, per-item permission checks, a result report and undo where possible (§8). Fix UX-002 before anything else.
+8. **Calendar-native scheduling.** Real invites and time zones first, then free/busy lookup, self-scheduling and candidate reschedule, then panels (§9).
+9. **Candidate flows are mobile-first, short, forgiving and explicit about consent.** A minimal required set; EEO optional and separated; input preserved on error; resilient submission (§19, §20).
+10. **Visibility is per role and per artefact.** Scoped roles, private notes, hidden peer scorecards and protected EEO/compensation data, enforced on the server (§12, §16).
+11. **State communication is designed, not incidental.** Empty, loading and error states follow the Carbon, Polaris and GOV.UK guidance and are announced to assistive technology (§17–§19).
+12. **Accessibility and i18n are foundations, not phases.** WCAG 2.2 AA (including 2.5.7 drag alternatives and 4.1.3 status messages) and localisation are built into the component library from day one (§22).
+13. **Approvals are re-triggered only by material changes.** This is a lesson from documented customer friction (§21).
+14. **Preserve what OpenCATS already does well.** Keep the one-dialog status workflow with its side effects, MRU and quick search, duplicate detection at entry, the per-user column chooser and "add new candidate from the job" auto-pipelining (`UX_UI_AUDIT.md` §12.1), re-expressed in the new patterns.
+
+---
+
+## Facts vs Inferences
+
+**Facts (verified first-hand)**
+- **OpenCATS baseline:** every statement cited to `UX_UI_AUDIT.md`, `FEATURE_INVENTORY.md` or `PRODUCT_GAPS.md` IDs. These rest on the Phase 0 code audit.
+- **Greenhouse** (official API docs, `grnhse/greenhouse-api-docs` @271cd88):
+  - scorecard fields and the five overall-recommendation values;
+  - note visibility `admin_only` / `public` / `private`;
+  - approval flows (types, groups, quorum, sequential);
+  - scheduled-interview statuses and interviewer response statuses;
+  - interview kits on job stages;
+  - roles `interviewer` / `job_admin`, and job plus future-job permissions by office and department;
+  - job-board questions, EEOC compliance, demographic questions and GDPR `data_compliance`.
+- **Lever** (`lever/postings-api` @f61aac5): hosted job site and form (global and EU); name and e-mail as the only system-required fields; e-mail dedupe; consent fields; 2 POSTs per second rate limit and 429 handling; hosted form recommended.
+- **Bullhorn** (`bullhorn/career-portal` @c450bae): keyword and sidebar filters; one-modal apply with 5 core fields; configurable EEOC and consent; Apply disabled until valid, with a loading state; generic error message; 11 locale files.
+- **Teamtailor** (`teamtailor/tt-partner-docs` @cba212f): stage triggers and ordered "moving criteria" rules that move candidates between stages based on partner results.
+- **General guidance texts** (GOV.UK, Carbon, Polaris, WCAG 2.2, APG) as quoted.
+- **GitLab handbook** (@f243917): the *statements* quoted are verbatim from the repository. Their truth about Greenhouse and ModernLoop behaviour is an independent customer claim.
+
+**Source claims (not independently verified)**
+- All help-center content from Greenhouse, Lever, Ashby, Workable, Recruitee, Teamtailor, Pinpoint, Bullhorn KB, SAP, Oracle and Workday was seen only as search excerpts.
+- Marketing claims (Gem AI sourcing, Workday agent, SmartRecruiters app) were not verified.
+
+**Inferences (this author's reasoning)**
+- Every "Repeated pattern" paragraph.
+- The convergence ratings in the summary table.
+- The gap severities.
+- Step counts marked INFERENCE.
+- The ATS-specific empty-state cases.
+- The statement that search scope is "implicit" across vendors.
+- The cross-cutting principles.
+
+---
+
+## Unknowns
+
+1. **Vendor help-center pages in full.** None could be fetched because of egress blocking. All "search excerpt" claims need browser verification: wording, current UI names, plan or tier gating, and whether they are still current (e.g., Greenhouse saved searches, S10 vs S11).
+2. **Screenshots / visual layouts** of every vendor. Not viewable.
+3. **iCIMS:** no evidence gathered on any pattern area.
+4. **Independent review aggregates** (G2, Capterra, TrustRadius) and analyst reports. Not reachable, and the search budget was exhausted. Friction evidence is therefore limited to vendor-documented limitations and the GitLab handbook.
+5. **Notifications:** in-app, e-mail digest, Slack/Teams and mobile push behaviour for all vendors (only claims and app existence were found).
+6. **@mentions** in any vendor, and what "share" grants (Recruitee).
+7. **Analytics UX detail:** filters, drill-down and export for all vendors.
+8. **Settings/admin and permissions UX detail** beyond Greenhouse's API model.
+9. **Accessibility conformance** (VPAT/ACR, WCAG level) for all 14 vendors.
+10. **Empty, loading and error state behaviour** in vendor products. General guidance was used instead.
+11. **Offer-approval UI steps** and mobile or chat approvals, for all vendors.
+12. **Scorecard behaviour** in Workday, SAP SuccessFactors, Oracle, iCIMS, SmartRecruiters, Ashby and Workable.
+13. **Single-candidate stage-move step counts** in Greenhouse, Workable and Ashby.
+14. **Ownership/M&A context.** Only an SAP Learning course title linking SmartRecruiters with SAP SuccessFactors was seen (S65). Ownership facts should be taken from the competitor profile documents, not from this file.
+15. **Teamtailor Candidates tab visible only to Group members.** The excerpt's attribution to S55 is uncertain.
+
+---
+
+## Sources
+
+All accessed 2026-09-25. Evidence grade in brackets: **[F]** = read first-hand (FACT-grade source); **[V-x]** = vendor, search excerpt only; **[V]** = vendor marketing claim; **[I-f]** = independent, read first-hand; **[I-x]** = independent, search excerpt; **[G]** = general guidance read first-hand; **[T]** = title seen in search results only.
+
+**Greenhouse**
+1. S1 — https://support.greenhouse.io/hc/en-us/articles/4402108629787-Task-management-overview — Greenhouse Support, "Task management overview" — [V-x] — accessed 2026-09-25
+2. S2 — https://support.greenhouse.io/hc/en-us/articles/115003243886-Personalize-your-Greenhouse-Recruiting-dashboard — Greenhouse Support — [V-x] — accessed 2026-09-25
+3. S3 — https://support.greenhouse.io/hc/en-us/articles/360016572311-Hiring-team-role-Hiring-manager — Greenhouse Support — [V-x] — accessed 2026-09-25
+4. S4 — https://support.greenhouse.io/hc/en-us/articles/4402694472347-Hiring-Manager-Review-stage — Greenhouse Support — [V-x] — accessed 2026-09-25
+5. S5 — https://support.greenhouse.io/hc/en-us/articles/11957068130971-Using-the-new-candidate-profile — Greenhouse Support — [V-x] — accessed 2026-09-25
+6. S6 — https://support.greenhouse.io/hc/en-us/articles/30352015432987-Candidate-profile-redesign-overview — Greenhouse Support — [V-x] — accessed 2026-09-25
+7. S7 — https://support.greenhouse.io/hc/en-us/articles/360028064592-Move-candidates-to-another-stage-in-bulk — Greenhouse Support — [V-x] — accessed 2026-09-25
+8. S8 — https://support.greenhouse.io/hc/en-us/articles/4874727408795-Visual-Candidate-Pipeline — Greenhouse Support — [V-x] — accessed 2026-09-25
+9. S9 — https://support.greenhouse.io/hc/en-us/articles/202360199-Search-candidates-using-Boolean-queries — Greenhouse Support — [V-x] — accessed 2026-09-25
+10. S10 — https://support.greenhouse.io/hc/en-us/articles/200775575-Save-candidate-search — Greenhouse Support (older article) — [V-x] — accessed 2026-09-25
+11. S11 — https://support.greenhouse.io/hc/en-us/articles/27104809835291-Talent-Filtering — Greenhouse Support — [V-x] — accessed 2026-09-25
+12. S12 — https://support.greenhouse.io/hc/en-us/articles/4409534663579-Candidate-self-scheduling-overview — Greenhouse Support — [V-x] — accessed 2026-09-25
+13. S13 — https://support.greenhouse.io/hc/en-us/articles/4409534692507-Complete-a-self-schedule-request — Greenhouse Support — [V-x] — accessed 2026-09-25
+14. S14 — https://support.greenhouse.io/hc/en-us/articles/4409526364443-Candidate-self-scheduling-setup — Greenhouse Support — [V-x] — accessed 2026-09-25
+15. S15 — https://support.greenhouse.io/hc/en-us/articles/13301025470875-Request-candidate-availability — Greenhouse Support — [V-x] — accessed 2026-09-25
+16. S16 — https://support.greenhouse.io/hc/en-us/articles/4408761575963-Report-dashboards-overview — Greenhouse Support — [T] — accessed 2026-09-25
+17. S17 — https://support.greenhouse.io/hc/en-us/articles/30184390692379-Talent-Rediscovery — Greenhouse Support — [V-x] — accessed 2026-09-25
+18. S18 — https://support.greenhouse.io/hc/en-us/articles/360028035692-Add-candidates-to-another-job-in-bulk — Greenhouse Support — [T] — accessed 2026-09-25
+19. S19 — https://support.greenhouse.io/hc/en-us/articles/360018647671-Add-hiring-manager-review-stage-to-interview-plans-in-bulk — Greenhouse Support — [T] — accessed 2026-09-25
+20. S20 — https://github.com/grnhse/greenhouse-api-docs (commit 271cd88, 2026-09-10; files `source/includes/harvest/_scorecards.md`, `_activity_feed.md`, `_approvals.md`, `_scheduled_interviews.md`, `_user_roles.md`, `_user_permissions.md`, `_job_stages.md`, `source/includes/job-board/_jobs.md`) — official Greenhouse developer docs on GitHub — [F] — accessed 2026-09-25
+
+**Lever**
+
+21. S21 — https://help.lever.co/hc/en-us/articles/20087316973981-Using-the-bulk-action-toolbar — Lever Help Center — [V-x] — accessed 2026-09-25
+22. S22 — https://help.lever.co/hc/en-us/articles/20087378017949-Understanding-the-structure-of-your-pipeline — Lever Help Center — [V-x] — accessed 2026-09-25
+23. S23 — https://help.lever.co/hc/en-us/articles/20087317030685-Searching-the-database-for-candidates — Lever Help Center — [V-x] — accessed 2026-09-25
+24. S24 — https://help.lever.co/hc/en-us/articles/20087358474397-Getting-started-with-Lever-as-an-Interviewer — Lever Help Center — [V-x] — accessed 2026-09-25
+25. S25 — https://help.lever.co/hc/en-us/articles/6618029187981-Visual-Insights-Hiring-Manager-dashboard — Lever Help Center — [V-x] — accessed 2026-09-25
+26. S26 — https://help.lever.co/hc/en-us/articles/20087333592093-Visual-Insights-Interviews-dashboard — Lever Help Center — [T] — accessed 2026-09-25
+27. S27 — https://github.com/lever/postings-api (commit f61aac5, 2026-04-23; `README.md`) — official Lever API docs on GitHub — [F] — accessed 2026-09-25
+
+**Ashby**
+
+28. S28 — https://docs.ashbyhq.com/scheduling-and-interviews-an-introduction — Ashby Knowledge Base — [V-x] — accessed 2026-09-25
+29. S29 — https://ashbyhq.com/platform/recruiting/scheduling — Ashby product page — [V-x] — accessed 2026-09-25
+30. S30 — https://docs.ashbyhq.com/candidate-pipeline — Ashby Knowledge Base — [V-x] — accessed 2026-09-25
+31. S31 — https://docs.ashbyhq.com/application-review — Ashby Knowledge Base — [V-x] — accessed 2026-09-25
+
+**Workable**
+
+32. S32 — https://help.workable.com/hc/en-us/articles/22233308582423-Exploring-Workable-home-page — Workable Help — [V-x] — accessed 2026-09-25
+33. S33 — https://help.workable.com/hc/en-us/articles/360039694933-Mobile-dashboard-overview — Workable Help — [V-x] — accessed 2026-09-25
+34. S34 — https://help.workable.com/hc/en-us/articles/8495289154839-Moving-candidates-through-the-pipeline — Workable Help — [V-x] — accessed 2026-09-25
+35. S35 — https://help.workable.com/hc/en-us/articles/4413312707991-Recruiting-pipeline-best-practices — Workable Help — [V-x] — accessed 2026-09-25
+36. S36 — https://help.workable.com/hc/en-us/articles/6058530293015-How-do-I-run-an-advanced-boolean-search-for-candidates — Workable Help — [V-x] — accessed 2026-09-25
+37. S37 — https://help.workable.com/hc/en-us/articles/360007483594-Self-scheduled-events — Workable Help — [V-x] — accessed 2026-09-25
+38. S38 — https://help.workable.com/hc/en-us/articles/8808063238935-Workable-Report-center-overview — Workable Help (Activity log report seen in the same result list: https://help.workable.com/hc/en-us/articles/115012921548-Using-the-Activity-log-report) — [T] — accessed 2026-09-25
+39. S39 — https://help.workable.com/hc/en-us/articles/360002392334-How-do-I-schedule-a-multi-part-interview — Workable Help — [T] — accessed 2026-09-25
+40. S40 — https://help.workable.com/hc/en-us/articles/115011967408-Customizing-the-recruiting-pipeline — Workable Help (also "Choosing and updating a pipeline for a job", https://help.workable.com/hc/en-us/articles/115012371248, and "Setting up automated actions", https://help.workable.com/hc/en-us/articles/1500007691921) — [T] — accessed 2026-09-25
+
+**Recruitee (Tellent)**
+
+41. S41 — https://support.recruitee.com/en/articles/1066290-performing-bulk-actions — Recruitee Help Center — [V-x] — accessed 2026-09-25
+42. S42 — https://support.recruitee.com/en/articles/4142043-pipelines — Recruitee Help Center — [V-x] — accessed 2026-09-25
+43. S43 — https://recruitee.com/candidate-pipeline-management — Recruitee product page — [V-x] — accessed 2026-09-25
+44. S44 — https://support.recruitee.com/en/articles/1066269-search-candidates-in-a-talent-pool — Recruitee Help Center — [V-x] — accessed 2026-09-25
+
+**Teamtailor**
+
+45. S45 — https://support.teamtailor.com/en/articles/11161661-hiring-manager-guide-to-teamtailor — Teamtailor Support — [V-x] — accessed 2026-09-25
+46. S46 — https://support.teamtailor.com/en/articles/9153972-our-candidate-card — Teamtailor Support — [V-x] — accessed 2026-09-25
+47. S47 — https://support.teamtailor.com/en/articles/2564412-job-scorecards — Teamtailor Support — [V-x] — accessed 2026-09-25
+48. S48 — https://support.teamtailor.com/en/articles/7891886-job-match-score — Teamtailor Support — [V-x] — accessed 2026-09-25
+49. S49 — https://support.teamtailor.com/en/articles/15443685-manage-candidates-across-multiple-recruitment-processes-in-the-applications-view — Teamtailor Support — [V-x] — accessed 2026-09-25
+50. S50 — https://updates.teamtailor.com/manage-candidates-across-all-your-jobs-in-one-place-341111 — Teamtailor product updates — [V-x] — accessed 2026-09-25
+51. S51 — https://support.teamtailor.com/en/articles/6302247-let-your-candidates-self-schedule-your-meetings — Teamtailor Support — [V-x] — accessed 2026-09-25
+52. S52 — https://updates.teamtailor.com/candidate-self-scheduled-meetings-rescheduling-332518 — Teamtailor product updates — [V-x] — accessed 2026-09-25
+53. S53 — https://support.teamtailor.com/en/articles/8355597-book-a-meeting — Teamtailor Support — [V-x] — accessed 2026-09-25
+54. S54 — https://github.com/teamtailor/tt-partner-docs (commit cba212f, 2026-09-09; `source/includes/partners/_webhooks.md.erb`, `moving_criteria/_index.md.erb`, `_changelog.md.erb`) — official Teamtailor partner API docs on GitHub — [F] — accessed 2026-09-25
+55. S55 — https://support.teamtailor.com/en/articles/8182137-default-user-guide-to-teamtailor — Teamtailor Support (attribution of the "Candidates tab for Group members" excerpt is uncertain) — [V-x] — accessed 2026-09-25
+
+**Pinpoint**
+
+56. S56 — https://help.pinpoint.support/en/articles/10505682-board-view — Pinpoint Help Center — [V-x] — accessed 2026-09-25
+57. S57 — https://help.pinpoint.support/en/articles/2610690-how-do-i-create-a-hiring-workflow — Pinpoint Help Center — [T] — accessed 2026-09-25
+
+**Bullhorn**
+
+58. S58 — https://kb.bullhorn.com/ats/Content/BHATS/Topics/savedAndRecentSearches.htm — Bullhorn ATS knowledge base — [V-x] — accessed 2026-09-25
+59. S59 — https://kb.bullhorn.com/ats/Content/BHATS/Topics/newCandidateListFAQ.htm — Bullhorn ATS knowledge base — [V-x] — accessed 2026-09-25
+60. S60 — https://github.com/bullhorn/career-portal (commit c450bae, 2026-05-22; `src/app/apply-modal/*`, `src/app/sidebar/*`, `src/static/i18n/*`) — Bullhorn official open-source career portal — [F] — accessed 2026-09-25
+
+**Gem**
+
+61. S61 — https://www.gem.com/product/ai-sourcing — Gem product page — [V] — accessed 2026-09-25
+62. S62 — https://help.gem.com/external/getting-started-with-ai-sourcing — Gem Help Center — [V-x] — accessed 2026-09-25
+
+**SmartRecruiters / SAP SuccessFactors**
+
+63. S63 — https://apps.apple.com/us/app/hiring/id797577300 — SmartRecruiters "Hiring" app, Apple App Store listing — [V-x] — accessed 2026-09-25
+64. S64 — https://play.google.com/store/apps/details?id=com.smartrecruiters.backoffice&hl=en_US — SmartRecruiters "Hiring" app, Google Play listing — [V-x] — accessed 2026-09-25
+65. S65 — https://learning.sap.com/courses/smartrecruiters-for-sap-successfactors-academy/implementing-individual-and-group-interview-self-scheduling_ee0f7a65-66e5-481a-ba28-ce2ca1799818 — SAP Learning course unit — [T] — accessed 2026-09-25
+66. S66 — https://help.sap.com/docs/successfactors-recruiting/setting-up-and-maintaining-sap-successfactors-recruiting/interview-scheduling-candidate-view — SAP Help Portal — [V-x] — accessed 2026-09-25
+67. S67 — https://help.sap.com/docs/successfactors-recruiting/setting-up-and-maintaining-sap-successfactors-recruiting/configuring-interview-scheduling — SAP Help Portal — [V-x] — accessed 2026-09-25
+68. S68 — https://blog.sap-press.com/scheduling-interviews-in-sap-successfactors-recruiting — SAP PRESS blog (independent publisher) — [I-x] — accessed 2026-09-25
+69. S69 — https://sapinsider.org/articles/an-overview-of-sap-successfactors-interview-scheduling-functionality/ — SAPinsider (independent publisher) — [I-x] — accessed 2026-09-25
+
+**Oracle**
+
+70. S70 — https://docs.oracle.com/en/cloud/saas/talent-management/faarb/candidate-schedule-based-on-interviewers-availability.html — Oracle Cloud documentation — [V-x] — accessed 2026-09-25
+71. S71 — https://docs.oracle.com/en/cloud/saas/talent-management/21c/faimh/candidate-interviews.html — Oracle Cloud documentation (Candidate Interviews, 21C) — [V-x] — accessed 2026-09-25
+
+**Workday**
+
+72. S72 — https://doc.workday.com/admin-guide/en-us/human-capital-management/recruiting/candidates/candidate-self-scheduling/thu1588675418534.html — Workday Administrator Guide, "Setup Considerations: Candidate Self-Scheduling" — [T] — accessed 2026-09-25
+73. S73 — https://www.workday.com/en-us/products/talent-management/talent-acquisition.html — Workday product page (attribution of the Teams/Slack/mobile excerpt to this exact page is uncertain) — [V] — accessed 2026-09-25
+74. S74 — https://www.workday.com/en-us/products/conversational-ai/candidate-experience.html — Workday product page — [V] — accessed 2026-09-25
+75. S75 — https://hr.wisc.edu/hr-guides/for-hr-professionals/create-and-manage-recruiting-self-schedule-calendar/ — University of Wisconsin–Madison HR guide (Workday customer) — [I-x] — accessed 2026-09-25
+
+**GitLab handbook (independent customer documentation; repository https://gitlab.com/gitlab-com/content-sites/handbook, commit f243917, 2026-09-25)**
+
+76. S76 — https://handbook.gitlab.com/handbook/hiring/talent-acquisition-framework/coordinator/ (`content/handbook/hiring/talent-acquisition-framework/coordinator.md`) — [I-f] — accessed 2026-09-25
+77. S77 — https://handbook.gitlab.com/handbook/hiring/conducting-a-gitlab-interview/ (`conducting-a-gitlab-interview.md`) — [I-f] — accessed 2026-09-25
+78. S78 — https://handbook.gitlab.com/handbook/hiring/interviewing/ (`interviewing/_index.md`) — [I-f] — accessed 2026-09-25
+79. S79 — https://handbook.gitlab.com/handbook/hiring/candidate-faq/ (`candidate-faq/_index.md`) — [I-f] — accessed 2026-09-25
+80. S80 — https://handbook.gitlab.com/handbook/hiring/referral-operations/ (`referral-operations.md`) — [I-f] — accessed 2026-09-25
+
+**IBM Carbon Design System (read from https://github.com/carbon-design-system/carbon-website, commit d8783ad)**
+
+81. S81 — https://carbondesignsystem.com/patterns/empty-states-pattern/ — [G] — accessed 2026-09-25
+82. S82 — https://carbondesignsystem.com/patterns/loading-pattern/ — [G] — accessed 2026-09-25
+83. S83 — https://carbondesignsystem.com/patterns/notification-pattern/ — [G] — accessed 2026-09-25
+84. S84 — https://carbondesignsystem.com/patterns/filtering/ — [G] — accessed 2026-09-25
+85. S85 — https://carbondesignsystem.com/patterns/search-pattern/ — [G] — accessed 2026-09-25
+86. S86 — https://carbondesignsystem.com/components/data-table/usage/ — [G] — accessed 2026-09-25
+
+**GOV.UK Design System (read from https://github.com/alphagov/govuk-design-system, commit 52b7062)**
+
+87. S87 — https://design-system.service.gov.uk/components/error-summary/ — [G] — accessed 2026-09-25
+88. S88 — https://design-system.service.gov.uk/components/error-message/ — [G] — accessed 2026-09-25
+89. S89 — https://design-system.service.gov.uk/patterns/validation/ — [G] — accessed 2026-09-25
+90. S90 — https://design-system.service.gov.uk/patterns/problem-with-the-service-pages/ — [G] — accessed 2026-09-25
+91. S91 — https://design-system.service.gov.uk/patterns/question-pages/ — [G] — accessed 2026-09-25
+92. S92 — https://design-system.service.gov.uk/patterns/check-answers/ — [G] — accessed 2026-09-25
+93. S93 — https://design-system.service.gov.uk/patterns/equality-information/ — [G] — accessed 2026-09-25
+94. S94 — https://design-system.service.gov.uk/patterns/names/ — [G] — accessed 2026-09-25
+95. S95 — https://design-system.service.gov.uk/patterns/complete-multiple-tasks/ — [G] — accessed 2026-09-25
+
+**Shopify Polaris (read from https://github.com/Shopify/polaris, commit 3f7954a)**
+
+96. S96 — https://github.com/Shopify/polaris/blob/main/polaris.shopify.com/content/components/selection-and-input/index-filters.mdx — [G] — accessed 2026-09-25
+97. S97 — https://github.com/Shopify/polaris/blob/main/polaris.shopify.com/content/components/tables/index-table.mdx — [G] — accessed 2026-09-25
+98. S98 — https://github.com/Shopify/polaris/blob/main/polaris.shopify.com/content/components/layout-and-structure/empty-state.mdx — [G] — accessed 2026-09-25
+99. S99 — https://github.com/Shopify/polaris/blob/main/polaris.shopify.com/content/patterns-legacy/loading.mdx — [G] — accessed 2026-09-25
+100. S100 — https://github.com/Shopify/polaris/blob/main/polaris.shopify.com/content/patterns/app-settings-layout/index.mdx — [G] — accessed 2026-09-25
+
+**W3C WAI (read from https://github.com/w3c/wcag, commit 71c891a, and https://github.com/w3c/aria-practices, commit 3f094fd)**
+
+101. S101 — https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html — Understanding SC 2.5.7 Dragging Movements — [G] — accessed 2026-09-25
+102. S102 — https://www.w3.org/TR/WCAG22/#status-messages — WCAG 2.2 SC 4.1.3 Status Messages (normative text) — [G] — accessed 2026-09-25
+103. S103 — https://www.w3.org/WAI/WCAG22/Understanding/redundant-entry.html — Understanding SC 3.3.7 Redundant Entry — [G] — accessed 2026-09-25
+104. S104 — https://www.w3.org/WAI/WCAG22/Understanding/reflow.html — Understanding SC 1.4.10 Reflow — [G] — accessed 2026-09-25
+105. S105 — https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html — Understanding SC 2.5.8 Target Size (Minimum) — [G] — accessed 2026-09-25
+106. S106 — https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html — Understanding SC 2.2.1 Timing Adjustable — [G] — accessed 2026-09-25
+107. S107 — https://www.w3.org/WAI/WCAG22/Understanding/accessible-authentication-minimum.html — Understanding SC 3.3.8 Accessible Authentication (Minimum) — [G] — accessed 2026-09-25
+108. S108 — https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html — Understanding SC 2.4.11 Focus Not Obscured (Minimum) — [G] — accessed 2026-09-25
+109. S109 — https://www.w3.org/WAI/WCAG22/Understanding/consistent-help.html — Understanding SC 3.2.6 Consistent Help — [G] — accessed 2026-09-25
+110. S110 — https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/ — WAI-ARIA Authoring Practices, Dialog (Modal) Pattern — [G] — accessed 2026-09-25
+
+**OpenCATS baseline (this repository)**
+
+111. S111 — `docs/audit/UX_UI_AUDIT.md` — Phase 0 UX/UI audit (UX-001…UX-022, journeys J1–J5) — [F] — accessed 2026-09-25
+112. S112 — `docs/audit/FEATURE_INVENTORY.md` — Phase 0 feature inventory (FEAT-001…FEAT-020) — [F] — accessed 2026-09-25
+113. S113 — `docs/audit/PRODUCT_GAPS.md` — Phase 0 product gaps (GAP-001…GAP-025) — [F] — accessed 2026-09-25
+
+**Additional**
+
+114. S114 — https://help.pinpoint.support/en/articles/6113124-understanding-roles — Pinpoint Help Center, "Understanding Roles" — [T] — accessed 2026-09-25
