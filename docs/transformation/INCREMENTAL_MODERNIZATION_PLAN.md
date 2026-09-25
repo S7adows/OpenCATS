@@ -70,6 +70,19 @@ Scoring: **user value + security + foundation + dependencies + migration risk**.
 
 ---
 
+### Mapping to UI migration waves (`docs/design/UI_MIGRATION_STRATEGY.md` §6)
+
+| Plan slice | UI waves |
+|---|---|
+| 1 Secure baseline + App Shell + Candidates list | W0 Foundations, W1 Shell (legacy pages wrapped; login page migrated), W2 Candidate list **without** bulk bar/saved views (those move to Slice 5) |
+| 2 Candidate profile & timeline | W3 (profile) + the edit parts of W4 (add/edit forms, duplicate warning) |
+| 3 Configurable pipeline | W3 status flow + W5 pipeline board |
+| 4 Job workspace | W5 job list/detail/forms |
+| 5 Search, views, bulk | W2 bulk bar, saved views, column manager; `home/SearchEverything.tpl` |
+| 8 Careers & apply | W6. **Resolution of a difference:** the design doc allows W6 as a parallel track right after W0; this plan keeps the careers *security containment* (SEC-024, attachments) in Slice 1 but schedules the careers UI rebuild after Slice 7, because consent capture must exist before new apply flows ship. |
+| 6, 9–13 | W8 (home/activities/calendar) and new surfaces |
+| 16, 19–21 | W7, W9 and sweeps |
+
 ## 4. Slice specifications
 
 Slices 1–3 are specified in full; later slices are specified at planning depth (all 11 fields) and will be re-detailed at their Discovery step.

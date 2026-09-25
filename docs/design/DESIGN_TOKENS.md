@@ -157,7 +157,7 @@ Contrast figures are **[FACT]**: WCAG 2.x relative-luminance ratios computed wit
 
 - **[RECOMMENDATION]** Set `color-scheme: light dark` on `:root`, so native controls, scrollbars and `<select>` popups follow the theme. This is a Vercel WIG rule adopted in `DESIGN_TOOLBOX_RESEARCH.md` §7.
 - **[RECOMMENDATION]** The theme is selected by `data-oc-theme="light|dark|system"` on `<html>`. `system` follows `prefers-color-scheme`. The user preference is stored server-side on the user profile, not in `localStorage` only, so the server can render the correct theme without a flash of the wrong one.
-- **[FACT/INFERENCE]** Legacy pages cannot be dark-themed: they carry 1,065 inline styles and raster images with baked backgrounds (`images/tabs/*.jpg`, `images/nodata/*`). **Dark mode applies only to fully migrated pages.** The shell forces `light` on any page that still renders legacy content (`UI_MIGRATION_STRATEGY.md` §3.4).
+- **[FACT/INFERENCE]** Legacy pages cannot be dark-themed: they carry 1,065 inline styles and raster images with baked backgrounds (`images/tabs/*.jpg`, `images/nodata/*`). **Dark mode applies only to fully migrated pages.** The shell forces `light` on any page that still renders legacy content (`UI_MIGRATION_STRATEGY.md` §2.3, document-level changes the shell introduces).
 
 ### 3.5 High contrast and forced colours
 
