@@ -278,7 +278,7 @@ The dashboard has "Hiring Overview" (a server-rendered image whose Weekly/Monthl
 |---|---|---|
 | 1.1.1 Non-text content | **Fail** | 327 `<img>` in templates: **108 without `alt`**, 61 with `alt=""`, including functional images. PHP-generated markup in `modules/` and `lib/` has 75 `<img>`, 20 without `alt`. Icon-only links: pipeline actions `edit.gif alt="" title="Log an Activity…"` (`candidates/Show.tpl:530`), DataGrid column chooser `tab_add.gif alt=""` (`DataGrid.php:1623`), sort icons `alt=""` (`:1766-1774`), quick-action trigger `downward.gif` with no alt (`QuickActionMenu.php` `getHtml`), list-modal icons (9 missing, `lists/QuickActionAddToListModal.tpl`). Empty-state CTAs are background images in `div`s containing only `&nbsp;` (`candidates/Candidates.tpl:7-10,151-158`). EEO chart images have no alt (`EEOReport.tpl:64,96,130,141`) |
 | 1.3.1 Info and relationships | **Fail** | 0 `scope=`, 0 `<caption>`, 0 `<fieldset>`/`<legend>`, 0 `<h1>` (page titles are `<h2>`, 88 occurrences). Radio groups have no grouping (`EEOReport.tpl:33-46`, questionnaire). Layout tables are not marked presentational. Invalid nesting: `<form>` directly inside `<table>` (`candidates/ConsiderSearchModal.tpl:8-9`), stray `</td>` (`candidates/Show.tpl:60`) |
-| 1.3.5 Identify input purpose | Fail | 0 `autocomplete` tokens; the candidate form sets `autocomplete="off"` (`Add.tpl:46`) |
+| 1.3.5 Identify input purpose | Fail | No input-purpose `autocomplete` tokens anywhere; the only value used is `autocomplete="off"` (31 occurrences, e.g. `candidates/Add.tpl:46`) |
 | 1.4.1 Use of colour | **Fail** | Hot, submitted and placed records are distinguished only by link colour (`main.css:857-902`). Validation marks the label red only (`js/lib.js:841-846`, `modules/candidates/validator.js:147-227`). The active sub-tab is shown by colour only (`TemplateUtility.php:685`). Links have `text-decoration: none` (`main.css:79-83`) |
 | 1.4.3 Contrast (minimum) | **Fail** | Computed ratios (text on background): sub-tab links `#f4f4f4` on `#6c94eb` = **2.70:1** (`main.css:225`); active sub-tab `#cccccc` on `#6c94eb` = **1.85:1**; placed links `#00ff00` on white = **1.37:1** (`main.css:891,902`); submitted `#ff6c00` = **2.84:1** (`:875,881`); MRU title `#ff6600` = **2.94:1** (`:297`); "(INACTIVE)" orange = **1.97:1** (`candidates/Show.tpl:71`); disabled-looking labels `#aaa` on `#eee` = **2.00:1** (`AddActivityChangeStatusModal.tpl:82`); hot red `#ff0000` = 4.00:1. 17 inline font sizes include 8 px/9 px/8 pt text (footer at 8 pt, `main.css:364-384`) |
 | 1.4.4 / 1.4.10 Resize, reflow | **Fail** | Pixel font sizes throughout; no reflow (UX-001) |
@@ -363,7 +363,7 @@ The dashboard has "Hiring Overview" (a server-rendered image whose Weekly/Monthl
 **Questionnaire flow:**
 - After submit, if the job has a questionnaire, all POST data is re-emitted as hidden fields and `CareerPortalQuestionnaireShow.tpl` is rendered (`CareersUI.php:737-792,1605-1627`).
 - The first radio answer is **pre-checked** (`CareerPortalQuestionnaireShow.tpl:56-59`).
-- Answers have no `<label>` (0 labels in the file), all radios in a group share one `id`, question text is output raw (`:47`), and there is no progress indication.
+- Answers have no `<label>` (0 labels in the file), all radios in a group share one `id`, description and question text are output raw (`:39,50`), and there is no progress indication.
 
 **Search and browse:**
 - `p=search` and `p=searchResults` are **empty branches** (`CareersUI.php:180-182,856-858`), and `Openings.tpl`/`SearchOpenings.tpl` are 0 bytes.
@@ -384,7 +384,7 @@ The dashboard has "Hiring Overview" (a server-rendered image whose Weekly/Monthl
 ## 10. Perceived performance
 
 - **List views** reload the full page for every sort, page change, filter, rows-per-page change, column add/remove/reorder and alphabet jump. Every list DataGrid sets `ajaxMode = false`: `modules/{candidates,joborders,companies,contacts,activity,lists}/dataGrids.php`, e.g. `candidates/dataGrids.php:15,81`. Only the two dashboard grids use AJAX (`home/dataGrids.php:51,212`). The link builder is `DataGrid.php:2391-2424`.
-- **Page size** defaults to 15 (`DataGrid.php:453-464`; `maxResults => 15` in 8 controllers); job orders use 50. The selector offers 15/30/50/100 (`DataGrid.php:740`). The pipeline shows 15 per user by default (`user.pipeline_entries_per_page DEFAULT '15'`, `db/cats_schema.sql:1084`).
+- **Page size** defaults to 15 (`DataGrid.php:453-464`; `maxResults => 15` in 9 places across 6 controllers); job orders use 50. The selector offers 15/30/50/100 (`DataGrid.php:740`). The pipeline shows 15 per user by default (`user.pipeline_entries_per_page DEFAULT '15'`, `db/cats_schema.sql:1084`).
 - **Modals:** closing most modals reloads the whole parent (`parentGoToURL` ×10, `parentHidePopWinRefresh` ×7; `subModal.js:252-258` does `window.location.href = sURL + ' '`).
 - **Resume load and parse** each cost a full POST round trip in both the recruiter and careers forms ("giving the illusion of AJAX", `CareersUI.php:467`).
 - **Quick Search** returns four unpaginated result sets (no `LIMIT` in `QuickSearch::candidates/companies/contacts/jobOrders`, `lib/Search.php:1329-1620`).
@@ -488,7 +488,7 @@ The dashboard has "Hiring Overview" (a server-rendered image whose Weekly/Monthl
 ### UX-010 — Form semantics defects
 - **Severity:** MEDIUM
 - **Finding:**
-  - 509 visible form controls but only 257 `<label for>`, of which 32 point to ids absent from the same file (script `notes/labels.py`).
+  - 509 visible form controls but only 257 `<label for>`, of which 32 point to ids absent from the same file (script `notes/labels.py`; approximate, since a few ids such as `dateAvailable` are generated by `DateInput()` in JS).
   - Several labels point to the *wrong* control: EEO Gender, Ethnic, Veteran and Disability all use `for="canRelocate"` and duplicate `id="canRelocateLabel"` (`candidates/Add.tpl:327,341,358,374,407`); "Best Time to Call" reuses `id="stateLabel" for="state"` (`:263`); Current and Desired Pay use `for="currentEmployer"` (`:437,446`).
   - Duplicate positive tabindex values (`:145,154` → `2`; `:255,266` → `13`).
   - A duplicate `enctype` attribute (`:46`).
@@ -500,7 +500,7 @@ The dashboard has "Hiring Overview" (a server-rendered image whose Weekly/Monthl
 
 ### UX-011 — Careers questionnaire biases answers
 - **Severity:** MEDIUM
-- **Finding:** For radio questions the first answer is checked by default (`$nochecked` logic, `settings/CareerPortalQuestionnaireShow.tpl:56-59`). All radios in the group share one id, answers have no `<label>`, and question and answer text are echoed raw (`:47,59`).
+- **Finding:** For radio questions the first answer is checked by default (`$nochecked` logic, `settings/CareerPortalQuestionnaireShow.tpl:56-59`). All radios in the group share one id, answers have no `<label>`, and description, question and answer text are echoed raw (`:39,50,59,73`).
 - **Evidence:** as above.
 - **Impact:** Applicants who skip a question silently submit the first answer. Screening data is skewed, and in knockout questionnaires applicants can be mis-screened.
 - **Recommendation:** Render no default selection, with an explicit "required" option per question. Wrap each group in `<fieldset><legend>`, give each answer a `<label for>` with a unique id, and escape the text.
@@ -633,7 +633,7 @@ The dashboard has "Hiring Overview" (a server-rendered image whose Weekly/Monthl
 3. **Hybrid SPA, incrementally.** Keep server routing (`index.php?m=&a=`) but serve JSON for lists and pipelines. Replace `DataGrid` HTML/JS generation (`lib/DataGrid.php`, 2,649 lines; `js/dataGrid.js`) with a client grid that consumes the existing column definitions, and keep the column chooser and persisted prefs. Replace subModal (`js/submodal/subModal.js`) with an accessible dialog and in-place updates (no `parentGoToURL`).
 4. **Template engine with auto-escaping.** Move `.tpl` (raw PHP includes, `lib/Template.php:98-127`) to Twig or Plates with auto-escape on. This eliminates UX-006-class bugs and lets UX-003 be fixed safely (store raw, escape on output).
 5. **Careers portal v2.** Keep DB-stored templates and pseudo-tags for backward compatibility, but render them through the auto-escaping engine. Ship a responsive, WCAG-AA default template replacing "CATS 2.0" (`db/cats_schema.sql:430-441`). Implement search, filters and pagination (`CareersUI.php:180,856`), accessible questionnaire markup (UX-011), inline validation that honours `req`, correct EEO lists (UX-004), and magic-link candidate identity (UX-007). Add branding settings (logo upload, primary colour, font) so most sites never touch raw HTML in `CareerPortalTemplateEdit.tpl`.
-6. **WCAG 2.1 AA program.** Work through §6 criterion by criterion. Suggested order: labels and names (UX-010 and quick search), dialogs and keyboard (UX-005), contrast and colour-only (UX-009), alt text (108 missing), headings and landmarks. Add axe-core checks to the Behat/Selenium suite (`test/behat.yml` already drives Selenium via `behat/mink-selenium2-driver` in `composer.json`).
+6. **WCAG 2.1 AA program.** Work through §6 criterion by criterion. Suggested order: labels and names (UX-010 and quick search), dialogs and keyboard (UX-005), contrast and colour-only (UX-009), alt text (108 missing), headings and landmarks. Add axe-core checks to the Behat/Selenium suite (`test/behat.yml:15-21` already configures a Selenium2 Chrome driver).
 7. **i18n foundation.** Extract strings, add `Intl` formatting and ISO dates, remove the SQL `str_replace` DMY hack (`lib/DatabaseConnection.php:703-709`), and add country and currency fields (§7).
 8. **Frontend toolchain.** Drop jQuery 1.3.2, `document.write` and `eval`. Move to ES modules and a bundler. Move inline handlers out to allow a strict CSP (UX-016).
 
