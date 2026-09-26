@@ -99,7 +99,7 @@ Pure documentation commits (other files under `docs/`) do **not** redeploy, so t
 | `PREVIEW_DEMO_PASSWORD`, `PREVIEW_ADMIN_PASSWORD` | preview.sh | random | Override generated passwords (local use only) |
 | `PREVIEW_TUNNEL_TOKEN` (secret), `PREVIEW_PUBLIC_URL` (variable) | workflow | unset | Named tunnel → persistent URL |
 | `PREVIEW_NODE_PATH` | preview.sh | global npm root | `node_modules` containing `playwright` (and `axe-core` for verification) |
-| `COMPOSER_DOCKER_ARGS`, `COMPOSER_FLAGS`, `COMPOSER_AUTH` | preview.sh | – / `--prefer-dist` / – | Composer step options (workflow passes a GitHub token to avoid API rate limits) |
+| `COMPOSER_DOCKER_ARGS`, `COMPOSER_FLAGS`, `COMPOSER_AUTH` | preview.sh | – / `--prefer-dist` / – | Composer step options. The workflow sets none of them: Composer 1.8.4 (in the PHP 7.2 image) rejects current GitHub token formats, and the two locked packages download anonymously (falling back to `git clone`) |
 | `HOURS` (input `hours`) | workflow | `5` | How long the preview stays online (≤ 5.5) |
 
 ## 8. Verification before a URL is handed over

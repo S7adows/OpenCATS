@@ -39,7 +39,8 @@ jobs:
       PREVIEW_PORT: '8090'
       PREVIEW_GATEWAY_IMAGE: 'nginx:1.27-alpine'
       PREVIEW_NODE_PATH: /tmp/pw/node_modules
-      COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ github.token }}"}}'
+      # No COMPOSER_AUTH: the PHP 7.2 image's Composer 1.8.4 rejects current GitHub token formats.
+      # Two packages fit well within anonymous API limits, and Composer falls back to git clone.
       HOURS: ${{ inputs.hours || '5' }}
     steps:
       - uses: actions/checkout@v4
