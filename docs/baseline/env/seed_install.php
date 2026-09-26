@@ -21,6 +21,13 @@
  * Like the installer's MySQLQuery(), SQL errors do not stop the run; unlike it, they are printed.
  */
 
+/* Command line only. This file lives inside the repository, which is also the web root of a
+ * normal OpenCATS install, so refuse to run when requested over HTTP. */
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 $mode = isset($argv[1]) ? $argv[1] : '';
 $db = mysqli_connect('localhost', 'cats', 'password', 'cats_dev');
 if (!$db) { fwrite(STDERR, 'connect failed: ' . mysqli_connect_error() . "\n"); exit(1); }
