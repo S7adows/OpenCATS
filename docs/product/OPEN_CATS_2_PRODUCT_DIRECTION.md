@@ -1,5 +1,7 @@
 # OpenCATS 2.0 — Product Direction (proposed)
 
+> **Status (2026-09-26):** first-edition draft from the earlier Phase 2 pass. It is **not** a final product strategy. It will be revisited in the strategy phase, after the fresh Phase 2 research in [docs/competitive/](../competitive/) (see `OPEN_CATS_OPPORTUNITY.md`).
+
 **Status:** PROPOSED for decision — not approved. Produced at the end of Phase 2 (competitive market research), 2026-09-25.
 **Inputs:** Phase 0 audit (`docs/audit/`), Phase 2 research (`docs/competitive/`). Companion documents: `PRODUCT_PRINCIPLES.md`, `TABLE_STAKES.md`, `DIFFERENTIATORS.md`, `NON_GOALS.md`.
 **Tagging:** statements are **[FACT]**, **[SOURCE CLAIM]**, **[INFERENCE]**, **[RECOMMENDATION]** or **[UNKNOWN]**. This whole document is a recommendation unless a statement is tagged otherwise.

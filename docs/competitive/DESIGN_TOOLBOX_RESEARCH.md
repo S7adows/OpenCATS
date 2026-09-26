@@ -1,5 +1,7 @@
 # OpenCATS 2.0: Design Toolbox Research
 
+> **Status (2026-09-26):** first edition (2026-09-25), not revised; design tooling is outside this research phase. Kept for reference only; its claims were not re-verified in the fresh Phase 2 edition.
+
 **Scope.** This document evaluates ten design resources the user supplied for the eventual OpenCATS 2.0 UI redesign (MOD-010 new UI, MOD-011 careers site). They are one design system (Meta's Astryx), five AI-agent "skill" or prompt packs (Impeccable, UI UX Pro Max, Taste Skill, Emil Kowalski's skills, Vercel's web-design-guidelines), and one template marketplace with its CLI (aitmpl.com / `claude-code-templates`). For each resource it records what the resource is, what it provides, how relevant it is to an enterprise ATS (data-dense tables, forms, accessibility, theming, dark mode, i18n/RTL, keyboard use), where it could fit, the risks, the dependencies it would add, and an adoption recommendation (ADOPT / TRIAL / REFERENCE-ONLY / AVOID).
 
 **Out of scope.** This document designs nothing: no screens, tokens, palettes or component choices are proposed. It does not decide the front-end stack; that is an open ADR (`docs/audit/MODERNIZATION_OPPORTUNITIES.md` §1.2, "Stack choice (ADR required in Phase 1)"). It does not rank design systems. Established alternatives appear only as labelled INFERENCE context.

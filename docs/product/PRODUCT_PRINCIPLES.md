@@ -1,5 +1,7 @@
 # OpenCATS 2.0 — Product Principles (proposed)
 
+> **Status (2026-09-26):** first-edition draft from the earlier Phase 2 pass. It is **not** a final product strategy. It will be revisited in the strategy phase, after the fresh Phase 2 research in [docs/competitive/](../competitive/) (see `OPEN_CATS_OPPORTUNITY.md`).
+
 **Status:** PROPOSED. Derived from Phase 0 findings (`docs/audit/`) and Phase 2 market evidence (`docs/competitive/`). Each principle states the evidence behind it, what it means in practice, and the anti-patterns it rules out. Principles are **[RECOMMENDATION]**s; the evidence rows carry their own grades.
 
 ---

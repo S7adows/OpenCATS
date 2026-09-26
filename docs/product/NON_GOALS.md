@@ -1,5 +1,7 @@
 # OpenCATS 2.0 — Non-Goals (proposed)
 
+> **Status (2026-09-26):** first-edition draft from the earlier Phase 2 pass. It is **not** a final product strategy. It will be revisited in the strategy phase, after the fresh Phase 2 research in [docs/competitive/](../competitive/) (see `OPEN_CATS_OPPORTUNITY.md`).
+
 **Status:** PROPOSED. Explicit statements of what OpenCATS 2.0 will **not** build, so scope stays focused (Phase 0 `RISKS.md` RISK-019 scope creep). Each non-goal has a rationale grounded in Phase 2 evidence and a horizon: **Never** (conflicts with principles), **Not in core** (integrate/partner), or **Not now** (revisit after foundations). All are **[RECOMMENDATION]**.
 
 ---

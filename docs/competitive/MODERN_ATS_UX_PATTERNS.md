@@ -1,5 +1,7 @@
 # Modern ATS UX Patterns: Cross-Market Benchmark for OpenCATS 2.0
 
+> **Status (2026-09-26):** first edition (2026-09-25), superseded by [UX_PATTERNS.md](UX_PATTERNS.md). Kept for reference only; its claims were not re-verified in the fresh Phase 2 edition.
+
 **Phase:** 2, competitive market research (UX benchmark) · **Date:** 2026-09-25 · **Baseline:** OpenCATS 0.9.7.4 as audited in `docs/audit/`
 
 This document compares UX patterns, not feature lists. For 22 pattern areas it asks the same questions: how the work gets done, how many steps it takes, what each actor decides, and what reduces effort or adds friction. It then states the repeated pattern and compares it with OpenCATS today. It does not rank vendors and does not design screens.

@@ -1,5 +1,7 @@
 # OpenCATS 2.0 — Differentiators (proposed)
 
+> **Status (2026-09-26):** first-edition draft from the earlier Phase 2 pass. It is **not** a final product strategy. It will be revisited in the strategy phase, after the fresh Phase 2 research in [docs/competitive/](../competitive/) (see `OPEN_CATS_OPPORTUNITY.md`).
+
 **Status:** PROPOSED. Differentiators are positions or capabilities where OpenCATS can be **meaningfully different or better** — not features copied from competitors. Each is tied to market evidence showing the gap (`docs/competitive/`), to what makes it credible for OpenCATS specifically, and to how it could be validated. All are **[RECOMMENDATION]**; evidence rows carry their own grades.
 
 > **Guardrail:** a differentiator only matters once the table stakes (`TABLE_STAKES.md`) are met. None of these compensates for missing SSO, scheduling, scorecards, privacy or accessibility.

@@ -1,5 +1,7 @@
 # ATS Pricing & Packaging — Market Scan (Phase 2)
 
+> **Status (2026-09-26):** first edition (2026-09-25), superseded by the pricing sections of the per-vendor profiles and [MARKET_OVERVIEW.md](MARKET_OVERVIEW.md). Kept for reference only; its claims were not re-verified in the fresh Phase 2 edition.
+
 **Date:** 2026-09-25 · **Phase:** 2 (Competitive Market Research) · **Author role:** research agent · **Status:** partial coverage — see §2.3 and §9 before relying on any figure.
 
 ---

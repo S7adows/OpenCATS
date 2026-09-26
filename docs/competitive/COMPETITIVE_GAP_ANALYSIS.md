@@ -1,5 +1,7 @@
 # Competitive Gap Analysis — OpenCATS vs the 2026 ATS Market
 
+> **Status (2026-09-26):** first edition (2026-09-25), superseded by [GAP_ANALYSIS.md](GAP_ANALYSIS.md). Kept for reference only; its claims were not re-verified in the fresh Phase 2 edition.
+
 **Scope.** A capability-by-capability comparison of OpenCATS (baseline: Phase 0 audit of our fork at `d607279`, `CATS_VERSION 0.9.7.4`) against the patterns documented across the market in Phase 2. For each capability: what OpenCATS does today, the modern market pattern, evidence, the gap, importance, complexity, a recommendation, and a classification. **This is not a feature-copy list**: capabilities are classified by the *product principle* they serve, and several market features are deliberately classified as OPTIONAL, FUTURE or not recommended.
 
 **Date:** 2026-09-25.

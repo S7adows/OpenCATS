@@ -1,5 +1,7 @@
 # AI in Recruiting: Landscape 2025–2026 and Implications for OpenCATS 2.0
 
+> **Status (2026-09-26):** first edition (2026-09-25), superseded by [AI_RECRUITING.md](AI_RECRUITING.md). Kept for reference only; its claims were not re-verified in the fresh Phase 2 edition.
+
 **Date:** 2026-09-25 · **Phase:** 2 (competitive market research) · **Status:** research draft for the lead. This is not legal advice. Every regulatory statement below needs review by qualified counsel before anyone relies on it.
 **Baseline documents:** `docs/audit/PRODUCT_GAPS.md` (GAP-002, GAP-011, GAP-016, GAP-021, GAP-023, GAP-024), `docs/audit/RISKS.md` (RISK-005), `docs/audit/SECURITY_AUDIT.md` (SEC-017, SEC-022), `docs/audit/FEATURE_INVENTORY.md` (FEAT-012).
 

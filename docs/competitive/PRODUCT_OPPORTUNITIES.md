@@ -1,5 +1,7 @@
 # Product Opportunities for OpenCATS 2.0
 
+> **Status (2026-09-26):** first edition (2026-09-25), superseded by [OPEN_CATS_OPPORTUNITY.md](OPEN_CATS_OPPORTUNITY.md). Kept for reference only; its claims were not re-verified in the fresh Phase 2 edition.
+
 **Scope.** Answers the Phase 2 opportunity questions — what is commoditised, what OpenCATS 2.0 must provide, where competitors are overly complex or weak, what OpenCATS could do differently, what not to build, where the product leverage is, and what would make OpenCATS genuinely competitive rather than "modern looking". It turns the evidence in `MARKET_OVERVIEW.md`, `COMPETITOR_RESEARCH.md`, `MODERN_ATS_UX_PATTERNS.md`, `ENTERPRISE_ATS_REQUIREMENTS.md`, `AI_RECRUITING_LANDSCAPE.md`, `OPEN_SOURCE_ATS.md`, `PRICING_AND_PACKAGING.md` and `COMPETITIVE_GAP_ANALYSIS.md` (GA-#) into opportunities. The product decisions derived from it are in `docs/product/`.
 
 **Date:** 2026-09-25. **Tags:** every conclusion is marked **[FACT]**, **[SOURCE CLAIM]**, **[INFERENCE]**, **[RECOMMENDATION]** or **[UNKNOWN]**. Recommendations are never presented as market facts. No vendor is ranked.

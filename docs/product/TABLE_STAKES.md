@@ -1,5 +1,7 @@
 # OpenCATS 2.0 — Table Stakes (proposed)
 
+> **Status (2026-09-26):** first-edition draft from the earlier Phase 2 pass. It is **not** a final product strategy. It will be revisited in the strategy phase, after the fresh Phase 2 research in [docs/competitive/](../competitive/) (see `OPEN_CATS_OPPORTUNITY.md`).
+
 **Status:** PROPOSED. A capability is a *table stake* when the Phase 2 evidence shows it is expected across OpenCATS's plausible segments and its absence disqualifies the product (`docs/competitive/COMPETITIVE_GAP_ANALYSIS.md`, classification TABLE STAKE; `docs/competitive/ENTERPRISE_ATS_REQUIREMENTS.md` Bar 0/Bar 1). These are **requirements statements, not designs**. Each row states the minimum bar (**[RECOMMENDATION]**), the market evidence (grade in the source document), and the Phase 0 baseline.
 
 **Legend:** GA-# = row in `COMPETITIVE_GAP_ANALYSIS.md`; ER-# = `ENTERPRISE_ATS_REQUIREMENTS.md`; UXP-# = `MODERN_ATS_UX_PATTERNS.md`. *Upstream note* = addressed in upstream OpenCATS v0.11.x per commit subjects (not code-reviewed).

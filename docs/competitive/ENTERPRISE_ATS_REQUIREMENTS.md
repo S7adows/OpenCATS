@@ -1,5 +1,7 @@
 # Enterprise ATS Requirements (2026): what enterprise buyers require, with evidence
 
+> **Status (2026-09-26):** first edition (2026-09-25), superseded by [ENTERPRISE_REQUIREMENTS.md](ENTERPRISE_REQUIREMENTS.md). Kept for reference only; its claims were not re-verified in the fresh Phase 2 edition.
+
 **Phase 2: Competitive Market Research.** Date: 2026-09-25. Companion documents: `PRICING_AND_PACKAGING.md` (tier gating), `AI_RECRUITING_LANDSCAPE.md` (AI regulation and features, in detail), `MODERN_ATS_UX_PATTERNS.md`. Baseline: Phase 0 audit in `docs/audit/`.
 
 > **Not legal advice.** This document summarises regulations to derive *product* requirements. Where it describes a law, it cites the primary source (the regulation text or the regulator's page). Several of those sources could **not** be fetched in this session (see §2.4), so those statements are marked **[UNVERIFIED]**. Counsel must confirm applicability, current status and dates before anyone relies on them.
