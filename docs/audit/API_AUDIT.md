@@ -1,725 +1,497 @@
-# OpenCATS: API and Integrations Audit
+# OpenCATS — API Assessment
+Complete edition · 2026-09-26 · code at d607279 (OpenCATS 0.9.7.4)
 
-**Scope.** This document lists and evaluates every machine-facing interface in the OpenCATS repository (CATS 0.9.x lineage). It covers:
-- the `ajax.php` RPC dispatcher and all 32 handler files under `ajax/` and `modules/*/ajax/`;
-- endpoints routed through `index.php` that return non-page responses (XML, CSV, vCard, PNG, text, or HTML fragments);
-- the public, unauthenticated surfaces: the careers portal, RSS, XML job feeds, the Firefox toolbar module, the graphs module, and web-reachable scripts;
-- the absence of a REST/JSON API;
-- every outbound or third-party integration: e-mail, LDAP, Resfly SOAP parsing, Sphinx, Google geocoding, the CATS version check, vCard, CSV import/export, calendar, document converters, job boards, hooks, and the queue/cron.
+## Scope and method
 
-Every claim below is tied to a file and line. Items that could not be verified in the code are labelled ASSUMPTION or INFERENCE.
+- **Inspected (read-only):** `ajax.php` and `lib/AJAXInterface.php`; all 21 handlers in `ajax/` and 11 in `modules/*/ajax/`; machine-facing actions routed through `index.php` (export, vCard, attachments, graphs, calendar data, settings `ajax_*`, wizard); the public surfaces (`careers/` → `modules/careers/CareersUI.php`, `rss/`, `xml/` → `modules/xml/XmlUI.php`, `lib/XmlJobExport.php`, `modules/toolbar/ToolbarUI.php`, install AJAX, `QueueCLI.php`, `rebuild_old_docs.php`); integrations (`lib/Mailer.php`, `lib/LDAP.php`, `lib/ParseUtility.php` + `wsdl/`, `lib/License.php`, `lib/ZipLookup.php`, `lib/NewVersionCheck.php`, `lib/DocumentToText.php`, `lib/VCard.php`, `lib/Export.php`, `modules/import/*`); the JS client (`js/lib.js`).
+- **Commands:** `grep`/`git grep` for every endpoint name and for `json_encode|application/json|SoapServer|csrf|oauth|saml|webhook|rate.?limit|VCALENDAR`; `sed -n` for every citation; `php -r` on PHP 8.4 to check the `DataGrid` identifier regex and removed functions.
+- **Runtime evidence used:** Phase 0.5 baseline (`docs/baseline/`): RT-01…RT-17, smoke steps #01–#94, `CURRENT_UI_MAP.md`, and `evidence/final-run/nginx.log` (42 `POST /ajax.php` requests, all HTTP 200; the `f` parameter is in the POST body and not logged) and `php_errors.log`. The baseline ran with the administrator account only, no SMTP server, no outbound internet, no scheduler.
+- **Earlier observation reused:** the Phase 0 edition probed external hosts from the audit sandbox on 2026-09-25 (not from the app): `soap.resfly.com` did not resolve; Google's keyless geocode URL returned `REQUEST_DENIED`; `www.catsone.com` returned 403 through the proxy (inconclusive). These are labelled as such.
+- **Not done:** no runtime security testing of any endpoint (none was allowed); no calls to a running instance; no LDAP, SMTP, parsing-service or job-board tests. Security weaknesses on these surfaces are owned by `SECURITY_AUDIT.md`; the API IDs below are kept because other documents reference them, but their security detail is kept short and points to the SEC ID.
 
----
+## Summary
 
-## Method
-
-These artefacts were inspected read-only. The only files written are this document and the `docs/audit/` directory.
-
-- Read in full: `ajax.php`, `lib/AJAXInterface.php`, all 21 files in `ajax/`, all 11 files in `modules/*/ajax/` (only the dispatch head of `modules/install/ajax/ui.php`), `modules/careers/CareersUI.php` (dispatch, apply, and registration paths), `modules/rss/RssUI.php`, `modules/xml/XmlUI.php`, `lib/XmlJobExport.php`, `modules/xml/xml_templates/*.xtpl`, `wsdl/*.wsdl`, `modules/toolbar/ToolbarUI.php`, `lib/Mailer.php`, `lib/LDAP.php`, `lib/ParseUtility.php`, `lib/License.php` (LicenseUtility), `lib/ZipLookup.php`, `lib/NewVersionCheck.php`, `lib/Hooks.php`, `lib/QueueProcessor.php`, `QueueCLI.php`, `modules/queue/**`, `modules/calendar/tasks/*`, `lib/DocumentToText.php`, `lib/Export.php`, `modules/export/ExportUI.php`, the relevant parts of `lib/DataGrid.php`, `modules/graphs/GraphsUI.php`, `modules/settings/SettingsUI.php` (`ajax_*` actions), `index.php` (routing), `js/lib.js` (AJAX client), `.htaccess` files, `config.php`, `constants.php`, `db/cats_schema.sql` (the `xml_feeds`, `career_portal_template`, and `system` tables), `.github/workflows/ci.yml`, `test/runAllTests.sh`, and `test/features/*`.
-- Commands used (all read-only): `grep -rn` for each endpoint name across `js/`, `modules/`, and `*.tpl` to find consumers; `grep -rn "json_encode|application/json|SoapServer|csrf|rate.?limit|oauth|saml|webhook|linkedin|ical|VCALENDAR"`; `sed -n`/`awk` with line numbers for every citation.
-- Executed in the scratchpad (PHP 8.4 CLI, no repo writes):
-  - `php -r 'var_dump(preg_replace("[^A-Za-z0-9]", "", "../../tmp/x"));'` returns `"../../tmp/x"`, which confirms the sanitiser in API-007 is ineffective.
-  - `php -r 'var_dump(function_exists("get_magic_quotes_runtime"));'` returns `false` (see API-019).
-  - `php -r 'include_once(LEGACY_ROOT . "/lib/CATSUtility.php");'` fails with `Error: Undefined constant "LEGACY_ROOT"` (see API-012).
-- Liveness probes run from the sandbox through its egress proxy on 2026-09-25: `getent hosts soap.resfly.com` returned no record; `curl http://soap.resfly.com/parse.php` returned `Could not resolve host`; `curl "https://maps.googleapis.com/maps/api/geocode/xml?sensor=false&address=10001"` returned `<status>REQUEST_DENIED</status> ... You must use an API key`; `curl http://www.catsone.com/catsnewversion.php` returned HTTP 403, which is inconclusive because the proxy may have produced it.
-
----
-
-## Summary of Findings
-
-| ID | Title | Severity |
-|---|---|---|
-| API-001 | No REST/JSON API exists. The only machine interface is a session-cookie-bound XML/HTML RPC used by the UI | HIGH |
-| API-002 | Careers "apply" trusts a client-supplied `candidateID`, so anyone can overwrite any candidate record without logging in | CRITICAL |
-| API-003 | The careers returning-candidate path calls `Candidates::update()` with misaligned arguments: EEO data is corrupted, the owner is reassigned, and a bogus "ownership change" mail is sent | HIGH |
-| API-004 | Careers "registered candidate" login is a forgeable cookie checked against e-mail, last name, and zip. It allows profile edits, and deletion of any attachment on the site by ID | HIGH |
-| API-005 | State-changing AJAX endpoints and `ajax_tags_*` do not check access level, so a READ-level user can delete or modify data | HIGH |
-| API-006 | No CSRF protection anywhere. `ajax.php` accepts GET through `$_REQUEST`, and the session cookie has no SameSite attribute | HIGH |
-| API-007 | `getDataGridPager` / `DataGrid::get()`: an ineffective regex allows path-traversal `include` of any `dataGrids.php` and instantiation of any loaded class | HIGH |
-| API-008 | Maintenance and operations scripts can be reached over the web without authentication: `install:maint`, `install:attachmentsReindex`, `QueueCLI.php`, `rebuild_old_docs.php` | MEDIUM |
-| API-009 | Toolbar API: `getLicenseKey` is unauthenticated, credentials travel in the GET query string, `attemptLogin` calls an undefined method, and the target browser platform no longer exists | MEDIUM |
-| API-010 | Resfly SOAP parsing is dead and not actually gated: `isParsingEnabled()` always returns true, and resume text plus the license key would be sent over plaintext HTTP. Hosts without ext-soap crash | HIGH |
-| API-011 | Mailer: PHPMailer runs in exception mode with no try/catch, `MAIL_MAILER=0` does not disable the transport, and forgot-password calls a method that does not exist | HIGH |
-| API-012 | Job syndication (RSS and XML): `rss/index.php` is fatally broken, output is not escaped as XML, the "portal disabled" setting is ignored, company and country are hard-coded, and there is no push submission | MEDIUM |
-| API-013 | ZIP lookup: an unauthenticated endpoint makes an outbound call to the keyless Google Geocoding API, which now returns `REQUEST_DENIED` | MEDIUM |
-| API-014 | No rate limiting or abuse controls on public endpoints: careers apply, graphs, zipLookup, toolbar login | MEDIUM |
-| API-015 | The AJAX response contract is inconsistent and unsafe: XML, HTML, or plain text; unescaped XML values; no versioning; errors detected by sniffing for a PHP error string | MEDIUM |
-| API-016 | No machine credentials (API keys or OAuth2) and no SSO (SAML or OIDC). The only external identity source is LDAP, with an unescaped filter and no TLS | MEDIUM |
-| API-017 | No webhooks or outbound events. The only extension API is `Hooks`: PHP strings stored in the session and `eval`'d, 232 hook names, 3 implementations | MEDIUM |
-| API-018 | The async queue depends on an undocumented cron job, registers the same task twice, and reports tasks by name only | LOW |
-| API-019 | The whole machine-facing surface (`ajax.php`, `index.php`, `QueueCLI.php`) hits a fatal error on PHP ≥ 8.0 (`get_magic_quotes_runtime`) | HIGH |
-| API-020 | Import/export: candidate CSV export has no access-level check and no protection against formula injection; import is CSV/TSV only with no API | MEDIUM |
-| API-021 | Interface test coverage is close to zero: CI never calls `ajax.php`, careers, RSS, XML, or the toolbar, and the in-app AJAX tests are mostly empty stubs | MEDIUM |
-| API-022 | The in-app test harness (`m=tests`) can be run by any logged-in user against the live database | MEDIUM |
-
----
-
-## 1. Interface map
-
-```
-                     ┌──────────────────────── authenticated (PHP session cookie "CATS") ─────────────────────────┐
-Browser UI ──XHR──►  ajax.php?f=<fn> | f=<module>:<fn>   → ajax/*.php, modules/*/ajax/*.php   (XML / HTML / text)
-            ──GET──► index.php?m=<module>&a=<action>     → ~30 UI modules; some actions return CSV, vCard, PNG, text
-                     └──────────────────────────────────────────────────────────────────────────────────────────┘
-Public    ──GET/POST► careers/  (index.php?m=careers | ?showCareerPortal=1)   HTML portal, apply + upload
-          ──GET────► rss/  (broken) | index.php?m=rss                         RSS 2.0
-          ──GET────► xml/?t=indeed|simplyhired | index.php?m=xml               job-feed XML
-          ──GET────► index.php?m=toolbar&a=…                                    Firefox toolbar text protocol
-          ──GET────► index.php?m=graphs&a=generic|genericPie|jobOrderReportGraph|wordVerify  PNG
-          ──GET────► QueueCLI.php, rebuild_old_docs.php, installwizard.php, installtest.php   (scripts)
-Outbound ──────────► SMTP/sendmail/mail() (PHPMailer) · LDAP :389 · SOAP http://soap.resfly.com (dead)
-                     · http://maps.googleapis.com geocode (no key) · http://www.catsone.com:80 version check
-                     · Sphinx searchd :3312 · local binaries antiword/pdftotext/html2text/unrtf
-```
-
----
-
-## 2. The AJAX dispatcher (`ajax.php`)
-
-### 2.1 Request contract (FACT)
-- **Transport:** any HTTP method. Parameters are read from `$_REQUEST`, so GET and POST are both accepted (`ajax.php:63`, `:77`, `:110`, `:120`). The JS client always sends POST with `application/x-www-form-urlencoded` (`js/lib.js:308-315`, `:342-366`).
-- **Routing:** the `f` parameter.
-  - `f=<fn>` loads `ajax/<fn>.php` (`ajax.php:77-82`).
-  - `f=<module>:<fn>` loads `modules/<module>/ajax/<fn>.php` (`ajax.php:83-92`).
-  - Both parts are passed through `preg_replace("/[^A-Za-z0-9]/", "", …)` (`ajax.php:79,88,89`). This sanitiser is correct.
-- **Missing or unknown `f`:** the response is `<data><errorcode>-1</errorcode><errormessage>No function specified.|Invalid function name.</errormessage></data>` as `text/xml` (`ajax.php:63-75`, `:94-106`).
-- **`nobuffer`:** when present, the handler is included directly with no output buffering, no `AJAX_HOOK`, no whitespace filter, and no `$filters` (`ajax.php:110`, `:132-135`). The JS client sets it through `disableBuffering` (`js/lib.js:403-406`).
-- **`nospacefilter`:** when present, the regex `preg_replace('/^\s+/m', '', $output)` is skipped (`ajax.php:120-123`).
-- **`$filters`:** initialised as an empty array (`ajax.php:108`). Each element is `eval`'d against the buffered output (`ajax.php:125-128`). No handler in the repo populates it (`grep '\$filters\['` returns nothing). It is a dormant code-execution extension point that only hooks could fill, because `eval(Hooks::get('AJAX_HOOK'))` runs first (`ajax.php:118`).
-- **Session ID in the request body:** the client appends `&CATS=<session_id>` to every call (`js/lib.js:332-335`, `:349-352`). The value comes from `CATSSession::getCookie()`, which returns `CATS_SESSION_NAME . '=' . session_id()` (`lib/Session.php:555-558`). It is printed into many templates, for example `ajax/getPipelineJobOrder.php:191`. PHP ignores a session ID sent in POST unless `session.use_only_cookies=0` (INFERENCE from PHP defaults). The effect is that raw session IDs end up in page HTML where any XSS can read them.
-- **Anti-caching:** a random `rhash` parameter (`js/lib.js:322-325`) plus `Expires`/`Last-Modified` headers (`ajax.php:46-47`).
-- **Client timeout:** 15 s plus a per-call extra (`js/lib.js:50`, `:413`).
-
-### 2.2 Response contract (FACT)
-- `AJAXInterface::outputXMLPage()` sends `Content-type: text/xml`, followed by `<?xml version="1.0" encoding="UTF-8"?>` and the handler's XML string (`lib/AJAXInterface.php:47-53`; `AJAX_ENCODING` is `'UTF-8'` at `config.php:133`).
-- An error response is `<data><errorcode>N</errorcode><errormessage>msg</errormessage></data>`. The message is **not escaped** (`lib/AJAXInterface.php:61-69`). By convention `-1` means invalid input or not logged in and `-2` means no data or an operation error. Nothing defines this as constants.
-- A success response is `<data><errorcode>0</errorcode><errormessage></errormessage><response>…</response></data>` (`lib/AJAXInterface.php:77-86`).
-- Many handlers break this contract. They return plain text through `die()` (`ajax/editActivity.php:77`, `ajax/getCandidateIdByEmail.php:36`, `ajax/getCandidateIdByPhone.php:36`, which reuses the e-mail error text), HTML fragments (see the table), or CSV-like text (`modules/import/ajax/processMassImportItem.php:87`).
-- The JS client detects server failure by searching the body for `'</b> on line <b>'`, the PHP HTML error format (`js/lib.js:443-446`).
-- There is no version field or version negotiation, and no schema (XSD/DTD) for any response.
-
-### 2.3 Authentication helpers (`lib/AJAXInterface.php`)
-- `AJAXInterface` (`:38`) handles no authentication. It only provides output and validation helpers: `isRequiredIDValid` (`:97-135`), `isOptionalIDValid` (`:144-154`, which accepts `'NULL'`), `isChecked` (`:163-172`), and `getTrimmedInput` (`:180-188`).
-- `SecureAJAXInterface` (`:196-261`) calls `session_name(CATS_SESSION_NAME)` and `session_start()`. It rejects the request unless `$_SESSION['CATS']->isLoggedIn()` returns true (`:251-260`), then caches the site ID and user ID. **It performs no access-level (ACL) check.** Each handler must call `$_SESSION['CATS']->getAccessLevel(...)` itself, and only 4 of 32 do.
-- No class named `AJAXInterfaceStandard` exists. The two classes above are the whole abstraction.
-
-### 2.4 Endpoint inventory (every file under `ajax/` and `modules/*/ajax/`)
-
-"Auth" means `new SecureAJAXInterface()` is called at the cited line. "ACL" means an explicit `getAccessLevel` check. "State" means the call has a side effect.
-
-| # | `f=` | Purpose | Parameters | Response | Auth | ACL | State | JS / template consumer |
-|---|---|---|---|---|---|---|---|---|
-| 1 | `deleteActivity` | Delete an activity entry | `activityID` | XML success | ✔ `ajax/deleteActivity.php:33` | **none** | **Yes**: delete (`:47`) | `js/activity.js:568` |
-| 2 | `editActivity` | Update an activity and return the formatted row | `activityID`, `type`, `jobOrderID` (id or `NULL`), `notes`, `date` (MM-DD-YY), `hour`, `minute`, `ampm` | XML `type/typedescription/notes/regarding/date`; plain text on a bad date (`:77`) | ✔ `:36` | **none** | **Yes**: update (`:113`) | `js/activity.js:504` |
-| 3 | `getAttachmentLocal` | Check that an attachment file exists before download | `id`, `directoryNameHash` (md5 of the directory name) | XML `success` | ✔ `:31` | none; uses `new Attachments(-1)`, which skips site scoping (`:46`); capability check is the md5 hash (`:52`) | No | `js/attachment.js:102` |
-| 4 | `getCandidateIdByEmail` | Duplicate check by e-mail | `email` | XML `candidate/id,name`, name **not escaped** (`:63`) | ✔ `:30` | none | No | `js/candidate.js:81` |
-| 5 | `getCandidateIdByPhone` | Duplicate check by phone | `phone` | XML, same shape; name not escaped | ✔ `:30` | none | No | `js/candidate.js:151` |
-| 6 | `getCompanyContacts` | List a company's contacts | `companyID` | XML `contact/id,firstname,lastname`, not escaped (`:64-66`) | ✔ `:33` | none | No | `js/company.js:275` |
-| 7 | `getCompanyLocation` | Company address | `companyID` | XML `address/city/state/zip`, not escaped (`:60-63`) | ✔ `:33` | none | No | `js/company.js:154` |
-| 8 | `getCompanyLocationAndDepartments` | Address plus departments | `companyID` | XML; departments escaped, address not (`:66-70`) | ✔ `:33` | none | No | `js/joborder.js:113`, `js/contact.js:160` |
-| 9 | `getCompanyNames` | Company-name autocomplete | `dataName`, `maxResults` | XML `totalelements`, `result/id,name` (name `rawurlencode`d, `:81`) | ✔ `:34` | none | No | `suggestListActivate('getCompanyNames', …)` in `modules/joborders/Add.tpl:61`, `Edit.tpl:55`, `modules/contacts/Add.tpl:50`, `Edit.tpl:53` |
-| 10 | `getDataGridPager` | Re-render a DataGrid page | `i` (identifier `module:Class[:json]`), `p` (JSON params), `dynamicArgument` | **HTML** (`DataGrid::draw`) | ✔ `:34` | none (see API-007) | Session grid parameters | `js/dataGrid.js:574` |
-| 11 | `getDataItemJobOrders` | Job orders linked to a candidate, company, or contact | `dataItemID`, `dataItemType` (100, 200, or 300) | XML `joborder/id,title,companyname,assigned` (escaped) | ✔ `:30` | none | No | `js/activity.js:402` |
-| 12 | `getParsedAddress` | Parse a free-text address block | `mode` (`contact`, `company`, `person`), `addressBlock` | XML name, address, phones; input echoed **unescaped** (`:136-155`) | **✘ none**: `new AJAXInterface()` at `:35` | n/a | No (CPU only) | `js/addressParser.js:284` |
-| 13 | `getPipelineDetails` | Activity history of one pipeline row | `candidateJobOrderID` | **HTML** table; `notes` echoed raw (`:79-81`) | ✔ `:33` | none | No | `js/pipeline.js:52` |
-| 14 | `getPipelineJobOrder` | Paged, sorted pipeline for a job order | `joborderID`, `page`, `entriesPerPage`, `sortBy`, `sortDirection`, `indexFile`, `isPopup` | **HTML + inline JS** | ✔ `:37` | Row actions only (`:293`, `:303`, `:308`) | Session `setPipelineEntriesPerPage` (`:59`) | `js/pipeline.js:106` |
-| 15 | `getReportHTML` | Empty file (0 bytes) | none | empty body | none | n/a | No | none (dead) |
-| 16 | `replaceTemplateTags` | Fill e-mail template placeholders for a candidate | `candidateID`, `templateText` | XML `text` (escaped) | ✔ `:6` | none | No | `js/emailHandler.js:266` |
-| 17 | `setCandidateJobOrderRating` | Set a pipeline rating from -6 to 5 | `candidateJobOrderID`, `rating` | XML `newrating` | ✔ `:33` | ✔ `pipelines.editRating ≥ EDIT` (`:35`) | **Yes** (`:60`) | `js/match.js:130` |
-| 18 | `setColumnWidth` | Save a DataGrid column width | `instance`, `columnName`, `columnWidth`, all unvalidated | XML empty success | ✔ `:30` | none | **Yes**: saved to the database through `Session::setColumnPreferences` (`lib/Session.php:1209`) | `js/dataGrid.js:303` |
-| 19 | `showTemplate` | Fetch an e-mail template body | `templateID` | XML `text` (escaped) | ✔ `:5` | none | No | `js/emailHandler.js:168` |
-| 20 | `testEmailSettings` | Send a test e-mail | `testEmailAddress`, `fromAddress` (checked only for `@`, `:62`, `:73`) | XML success or error | ✔ `:33` | **none**: any user can send mail with any From address | **Yes**: sends e-mail (`:88`) | `modules/settings/Settings.js:140` |
-| 21 | `zipLookup` | City and state from a ZIP code using Google | `zip` | XML `address/city/state` | **✘ none**: `new AJAXInterface()` at `:9` | n/a | Outbound HTTP | `js/lib.js:604`, called from `CityState_populate` in candidates, companies, and contacts `Add/Edit.tpl` |
-| 22 | `import:processMassImportItem` | Import the next 50 files of a bulk-resume batch | none (reads `$_SESSION['CATS']->massImportFiles`) | **text** `dups,success,processed` or `done` (`:43`, `:87`) | ✔ `:33` | none; relies on the session state set by `ImportUI` | **Yes**: creates attachments (`:62-65`) | `modules/import/import.js:224` |
-| 23 | `install:ui` | Installer wizard steps (`a=startInstall`, `installTest`, `databaseConnectivity`, `mailSettings`, `setMailSettings`, `resumeParsing`, `optionalComponents`, `detectRevision`, `resetDatabase`, `restoreFromBackup`, `upgradeCats`, `maint`, `reindexResumes`, `loginCATS`, …; `ui.php:67-1044`) | `a` plus step parameters | HTML and `<script>` | **✘ none**; locked only by the existence of `INSTALL_BLOCK` (`:55`) | n/a | **Yes**: rewrites `config.php` through `CATSUtility::changeConfigSetting` with raw input (e.g. `:120`) and resets the database | `js/install.js:92`, `:172` |
-| 24 | `install:maint` | Runs `index.php` with `$maintPage=true` to step through pending schema upgrades | none | HTML/script | **✘ none** (`maint.php:30-37`) | n/a | **Yes**: deletes `modules.cache` and runs pending module-schema SQL or PHP (`lib/ModuleUtility.php:517-546`) | `js/install.js:134` |
-| 25 | `install:attachmentsReindex` | Re-extract text from every attachment | none | text count | **Conditional**: only if `INSTALL_BLOCK` exists (`:32-35`, `:52`) | SA, only when `INSTALL_BLOCK` exists | **Yes**: bulk `UPDATE attachment` (`:95`) | Included by `install:ui` (`ui.php:962`) |
-| 26 | `install:attachmentsToThreeDirectory` | One-off 0.x migration of the attachment directory layout | none | none | ✔ `:33` | ✔ ROOT (`:35`) | **Yes**: `ALTER TABLE` and file moves (`:57`, `:93`) | only in `CHANGELOG.MD:525` |
-| 27 | `lists:addToLists` | Add items to saved lists | `listsToAdd` (CSV of IDs), `itemsToAdd` (CSV of IDs), `dataItemType` | XML `response=success` | ✔ `:63` | none | **Yes** | `js/lists.js:344` |
-| 28 | `lists:deleteList` | Delete a saved list | `savedListID` | XML | ✔ `:36` | **none** | **Yes** | `js/lists.js:272` |
-| 29 | `lists:editListName` | Rename a list | `savedListID`, `savedListName` | XML `success`, `collision`, or `badName` | ✔ `:36` | none | **Yes** | `js/lists.js:106` |
-| 30 | `lists:newList` | Create a list | `dataItemType`, `description` | XML `success`, `collision`, or `badName` | ✔ `:36` | none | **Yes** | `js/lists.js:191` |
-| 31 | `settings:backup` | Full or attachments-only backup (`a=start` then `a=backup`) | `a`, `attachmentsOnly`, `attachmentID` | HTML `<script>` plus `progress.txt` written under `attachments/…` (`:66`) | ✔ `:34` | ✔ SA (`:36`) | **Yes**: writes the zip of DB and files | `modules/settings/Backup.tpl:69-70`, `js/backup.js` (polls `progress.txt`, `:202`) |
-| 32 | `tests:getCandidateJobOrderID` | Test helper | `candidateID`, `jobOrderID` | XML `id` | ✔ `:33` | none | No | only `modules/tests/testcases/AJAXTests.php:826` |
-
-**Totals:**
-- Auth: 26 of 32 handlers authenticate. `getParsedAddress`, `zipLookup`, `install:ui`, `install:maint`, and `install:attachmentsReindex` (when `INSTALL_BLOCK` is missing) do not, and `getReportHTML` is empty.
-- ACL: only 4 handlers check access level: `setCandidateJobOrderRating`, `install:attachmentsToThreeDirectory`, `settings:backup`, and `install:attachmentsReindex` (conditionally).
-- State: 15 handlers change persistent state, and 2 more (`getDataGridPager`, `getPipelineJobOrder`) change session state.
-- Formats: 22 return XML, 6 HTML, 3 text or nothing, and 1 (`getReportHTML`) is an empty file.
-
-### 2.5 Other machine-facing actions routed through `index.php` (not `ajax.php`)
-| Route | Returns | Auth / ACL | Evidence |
+| ID | Title | Severity | Confirmation |
 |---|---|---|---|
-| `m=settings&a=ajax_tags_add`, `ajax_tags_del`, `ajax_tags_upd` | HTML fragment. `tag_title` is echoed unescaped by `printf('%s')` in add | Login only. **No ACL**, while the `tags` page itself requires SA | `modules/settings/SettingsUI.php:675-700`, `:130-192` vs `:234`; consumer `modules/settings/tags.tpl:38-68` |
-| `m=settings&a=ajax_wizard{AddUser,DeleteUser,CheckKey,Localization,FirstTimeSetup,License,Password,SiteName,Email,Import,Website}` | Text/HTML | SA, except `ajax_wizardEmail`, which requires only READ (`:820`) | `SettingsUI.php:702-855`; `js/wizardIntro.js:204` |
-| `m=wizard&a=ajax_getPage` | HTML. `eval`s the PHP stored in `$_SESSION['CATS_WIZARD']` | Module does not require auth; data comes from the session | `modules/wizard/WizardUI.php:82`, `:181`; `modules/wizard/wizard.js:130` |
-| `m=calendar&a=dynamicData&month&year` | Custom pipe/comma-delimited event string | Login | `modules/calendar/CalendarUI.php:75`, `:305-338`; `lib/Calendar.php:501-518`; `modules/calendar/Calendar.js:538` |
-| `m=export&a=export` / `exportByDataGrid` | CSV (`text/x-csv`) | Login only, **no ACL** | `modules/export/ExportUI.php:60-66`, `:125`; `lib/DataGrid.php:1463` |
-| `m=contacts&a=downloadVCard` | vCard 2.1 | `contacts.downloadVCard ≥ READ` | `modules/contacts/ContactsUI.php:175-182`; `lib/VCard.php:54`, `:368-375` |
-| `m=attachments&a=getAttachment&id&directoryNameHash` | Binary stream | Login plus md5 capability; `Attachments(-1)` skips site scoping | `modules/attachments/AttachmentsUI.php:59`, `:83-85` |
-| `m=import&a=massImport&step=99…` | Text | `import.massImport ≥ EDIT` | `js/massImport.js:70`, `:118`; `modules/import/ImportUI.php:1507` |
-| `m=graphs&a=generic|genericPie|jobOrderReportGraph|wordVerify|testGraph` | PNG | **Public**; data comes from GET, up to 2000×1200 px | `modules/graphs/GraphsUI.php:48`, `:53-66`, `:78-99` |
-| `m=graphs&a=activity|newCandidates|…` | PNG | Login | `GraphsUI.php:101-133` |
+| API-001 | No public, documented or versioned API; the only machine interface is a session-bound UI RPC | MEDIUM | Static |
+| API-002 | Careers "apply" trusts a client-supplied `candidateID` (unauthenticated candidate overwrite; = SEC-024) | CRITICAL | Static |
+| API-003 | Careers returning-candidate update passes misaligned arguments to `Candidates::update()` | HIGH | Static |
+| API-004 | Careers registered-candidate login is a forgeable knowledge-based cookie (= SEC-025) | HIGH | Static |
+| API-005 | State-changing AJAX handlers check login only, not access level (= SEC-026) | HIGH | Static |
+| API-006 | No CSRF protection; `ajax.php` accepts GET; no SameSite on the session cookie (= SEC-004) | HIGH | Static |
+| API-007 | `getDataGridPager` identifier sanitiser is ineffective (include path / class instantiation; = SEC-027) | HIGH | Static |
+| API-008 | Maintenance and operations endpoints reachable without authentication (= SEC-028) | MEDIUM | Static |
+| API-009 | Legacy Firefox-toolbar API: unauthenticated licence-key output, credentials in GET, broken action | MEDIUM | Static |
+| API-010 | Resfly SOAP parsing is dead but always "enabled"; would send résumé text and licence key over plain HTTP | HIGH | Partial |
+| API-011 | Mail integration: uncaught PHPMailer exceptions, "disabled" mode still sends, forgot-password calls a missing method | HIGH | Runtime |
+| API-012 | Job syndication: RSS entry point fatal; feeds ignore portal settings, escape wrongly and hard-code employer data | MEDIUM | Runtime |
+| API-013 | ZIP lookup: unauthenticated endpoint proxies to a keyless Google API that refuses requests | MEDIUM | Partial |
+| API-014 | No rate limiting or abuse controls on public endpoints | MEDIUM | Static |
+| API-015 | AJAX response contract is inconsistent: XML/HTML/text, unescaped values, PHP errors returned as HTTP 200 | MEDIUM | Runtime |
+| API-016 | No machine credentials or SSO; LDAP is the only external identity source and is weak | MEDIUM | Static |
+| API-017 | No webhooks or outbound events; the only extension point is `eval` of session-stored hook strings | MEDIUM | Static |
+| API-018 | [Merged into ARCH-016] Queue/cron defects | — | — |
+| API-019 | [Merged into ARCH-001] PHP ≥ 8.0 fatals on every machine-facing entry point | — | — |
+| API-020 | Import/export: candidate CSV export has no access check and no formula-injection guard; import is CSV/TSV only | MEDIUM | Static |
+| API-021 | Almost no automated coverage of any interface | MEDIUM | Static |
+| API-022 | In-app SimpleTest harness (`m=tests`) runnable by any logged-in user against the live database | MEDIUM | Static |
+| API-023 | Careers apply endpoint silently discards a chosen résumé unless it was staged with "Upload" | HIGH | Runtime |
+
+21 findings — 1 CRITICAL / 8 HIGH / 12 MEDIUM / 0 LOW · Runtime 4 / Static 15 / Partial 2 / Unverified 0 · 2 merged stubs (API-018, API-019) excluded from the counts.
+
+---
+
+## 1. Absence of a public API
+
+**As built.** There is no REST, JSON, SOAP-server, XML-RPC or GraphQL interface. `git grep` for `json_encode|application/json` finds only `lib/DataGrid.php` (grid state in URLs) and `ajax/getDataGridPager.php:44`; no response is sent as JSON; `SoapServer`, `Authorization` header handling, API keys and CORS code are absent. What exists instead:
+
+| Interface | Direction | Format | Auth | Consumer |
+|---|---|---|---|---|
+| `ajax.php` RPC (§2) | In | XML, HTML fragments, text | PHP session cookie `CATS` | The app's own JS |
+| Careers portal (§3.1) | In (public) | HTML forms, multipart | None / knowledge cookie | Applicants |
+| RSS / XML job feeds (§3.2) | Out (pull) | RSS 2.0, custom XML | None | Feed readers, job boards |
+| CSV export, vCard, attachment download | Out | `text/x-csv`, `text/x-vCard`, binary | Session | Users' browsers |
+| CSV/TSV import, bulk résumé import | In | Files via UI | Session | Users |
+| Graph images | Out | PNG/JPEG | Five actions public | Pages, PDF report |
+
+Runtime: the final smoke run made 42 `POST /ajax.php` calls, all from the UI (autocomplete, grids, test e-mail); no other machine client exists in the repository.
+
+```
+                 +------------- authenticated (PHP session cookie "CATS") --------------+
+ Browser UI -XHR-> ajax.php?f=<fn> | f=<module>:<fn> -> ajax/*.php, modules/*/ajax/*.php  (XML/HTML/text)
+            -GET-> index.php?m=<module>&a=<action>    -> pages; some actions return CSV, vCard, files, images
+                 +-----------------------------------------------------------------------+
+ Public    -----> careers/index.php?p=...             HTML portal: list, detail, apply (+ upload)
+           -----> xml/?t=indeed|simplyhired            job feed (works)      rss/  (fatal, RT-05)
+           -----> index.php?m=graphs|toolbar|wizard     images / toolbar text protocol / wizard pages
+           -----> ajax.php?f=getParsedAddress|zipLookup|install:*   QueueCLI.php  rebuild_old_docs.php
+ Outbound  -----> SMTP (PHPMailer) | LDAP :389 | SOAP http://soap.resfly.com | http://maps.googleapis.com
+                  | http://www.catsone.com:80 (version check, off by seed) | Sphinx :3312 | exec(converters)
+                  | http://<Host>/index.php?m=graphs... (PDF report fetches itself, ARCH-026)
+```
+
+### API-001 — No public, documented or versioned API
+*Confirmation: **Static** · Phase 0 severity: HIGH → now MEDIUM (absence of a capability; no existing workflow is broken, so it does not meet this edition's HIGH criteria) · Related: PRODUCT_GAPS, ARCH-010*
+
+- **Confirmed fact:** No domain object (candidate, company, contact, job order, pipeline, activity, attachment, list, event, user) can be read or written by another system except by driving the HTML UI with a logged-in browser session. `ajax.php` is a private UI RPC: it returns XML or HTML fragments shaped for specific pages, has no versioning, no documentation and no credential other than the session cookie.
+- **Evidence:** `ajax.php:76-92` (routing by `f`); `lib/AJAXInterface.php:196-261` (session-only authentication); six handlers return HTML fragments (§2 inventory), e.g. `ajax/getPipelineJobOrder.php:184-330`, `ajax/getDataGridPager.php:60-61`; empty greps listed above.
+- **Impact:** Integrations with HRIS, job boards, calendars, e-mail tools or BI require HTML scraping. Automation and mobile clients are not possible. Because the UI and its RPC are the same code, any UI change breaks any unofficial client.
+- **Severity:** MEDIUM — a significant capability gap for an ATS, but not a defect in an existing workflow.
+- **Recommendation:** Treat the absence of a supported integration interface as an explicit product gap, and do not present `ajax.php` as an API, since its contract is tied to page markup.
+- **Unknown / needs further validation:** Whether third parties scrape the UI or call `ajax.php` today. Needs access logs from real installations.
+
+### API-016 — No machine credentials or SSO; LDAP is the only external identity source and is weak
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-001, SEC-006*
+
+- **Confirmed fact:** There are no API keys, personal access tokens, OAuth2 clients, SAML or OIDC (`grep` for `oauth|saml|openid|bearer|api[_-]?key` is empty). Authentication modes are `sql`, `ldap` and `sql+ldap` (`config.php:48`). Local passwords are unsalted MD5. The LDAP client builds its search filter by concatenation without `ldap_escape()` and connects with plain `ldap_connect()` without StartTLS; defaults point at a public test server.
+- **Evidence:** `lib/Users.php:35-37`, `:93`, `:823-845`; `lib/LDAP.php:40-51`, `:60`, `:68`, `:97`; `config.php:264-284` (`LDAP_HOST 'ldap.forumsys.com'`, port 389).
+- **Impact:** Any integration would have to share a human's password; there is no central identity, MFA or de-provisioning; LDAP credentials cross the network in cleartext. Security detail: SEC-001, SEC-006.
+- **Severity:** MEDIUM — limits integration and identity management; the credential weaknesses are rated in the SEC findings.
+- **Recommendation:** Record the lack of machine credentials and federated login as a gap, and harden the existing LDAP path (escaping, transport encryption) because it is the only external identity source today.
+- **Unknown / needs further validation:** LDAP behaviour against a real directory (not tested in the baseline). Needs an isolated directory server.
+
+### API-017 — No webhooks or outbound events; the only extension point is `eval` of hook strings
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: ARCH-004, SEC-011*
+
+- **Confirmed fact:** No webhook or outbound event mechanism exists (`grep webhook` is empty). The internal extension mechanism, `Hooks::get($name)`, returns PHP source strings from `$_SESSION['hooks']` for callers to `eval`. There are 278 call sites and 251 distinct hook names; 10 hooks are implemented, all in `SettingsUI::defineHooks()` (career-portal user restrictions). The same pattern appears in `ajax.php` (`AJAX_HOOK`, `$filters`).
+- **Evidence:** `lib/Hooks.php:52-72`; `lib/ModuleUtility.php:276-280`, `:296`; `modules/settings/SettingsUI.php:87-128`; `ajax.php:118`, `:125-128`.
+- **Impact:** Integrators cannot react to events such as a new application or a status change without polling or forking. Hook names are an undocumented internal contract; code execution risk is in SEC-011.
+- **Severity:** MEDIUM — missing integration capability plus an unsafe internal extension model.
+- **Recommendation:** Record the absence of an event interface as a gap, and note that the natural event points already exist where the code sends e-mail and writes history (status change, application, activity).
+- **Unknown / needs further validation:** Whether a hosted edition implemented hooks such as `CAREERS_SITEID` or `XML_SUBMIT_FEEDS_TO_QUEUE` elsewhere. Not answerable from this repository.
+
+---
+
+## 2. Internal AJAX RPC (`ajax.php`)
+
+**As built.** `ajax.php` loads config, the DB wrapper, the session class, `AJAXInterface` and `CATSUtility` (`:36-41`), then routes `f=<fn>` to `ajax/<fn>.php` or `f=<module>:<fn>` to `modules/<module>/ajax/<fn>.php` after stripping non-alphanumerics (`:76-92`; this sanitiser is correct). Parameters are read from `$_REQUEST`, so GET and POST both work. The handler output is buffered, `AJAX_HOOK` is evaluated, leading whitespace is stripped from every line unless `nospacefilter` is set, and `$filters` are evaluated (`:108-131`); `nobuffer` skips all of that. The JS client (`js/lib.js:342-366`) always POSTs, appends a random `rhash` and the session ID (`&CATS=<id>`, from `CATSSession::getCookie()`, printed into 40 places in templates and handlers). `SecureAJAXInterface` starts the session and dies unless logged in (`lib/AJAXInterface.php:202-222`); it performs no access-level check. The request/response contract is in Reference R1.
+
+### 2.1 Endpoint inventory
+
+Auth = `new SecureAJAXInterface()` at the cited line (login only). ACL = explicit `getAccessLevel` check. Writes = persistent side effect. "UI" = consumer in `js/` or templates.
+
+| # | `f=` | Purpose | Auth | ACL | Writes | Response |
+|---|---|---|---|---|---|---|
+| 1 | `deleteActivity` | Delete activity | `ajax/deleteActivity.php:33` | none | delete `:47` | XML |
+| 2 | `editActivity` | Update activity | `:36` | none | update `:113` | XML; text on bad date `:77` |
+| 3 | `getAttachmentLocal` | Check attachment file exists | `:31` | none; `Attachments(-1)` skips site scope `:46` | — | XML |
+| 4 | `getCandidateIdByEmail` | Duplicate check | `:30` | none | — | XML, name unescaped `:63` |
+| 5 | `getCandidateIdByPhone` | Duplicate check | `:30` | none | — | XML (reuses e-mail error text `:36`) |
+| 6 | `getCompanyContacts` | Company's contacts | `:33` | none | — | XML, unescaped `:64-66` |
+| 7 | `getCompanyLocation` | Company address | `:33` | none | — | XML, unescaped `:60-63` |
+| 8 | `getCompanyLocationAndDepartments` | Address + departments | `:33` | none | — | XML, partly escaped |
+| 9 | `getCompanyNames` | Company autocomplete | `:34` | none | — | XML (`rawurlencode`) |
+| 10 | `getDataGridPager` | Re-render a data grid | `:34` | none (API-007) | session grid state | HTML |
+| 11 | `getDataItemJobOrders` | Job orders for an item | `:30` | none | — | XML (escaped) |
+| 12 | `getParsedAddress` | Parse free-text address | **none** (`new AJAXInterface()` `:35`) | n/a | — | XML, input echoed unescaped `:136-155` |
+| 13 | `getPipelineDetails` | Pipeline activity history | `:33` | none | — | HTML, notes raw `:79-81` |
+| 14 | `getPipelineJobOrder` | Paged pipeline for a job | `:37` | row actions only `:293,303,308` | session page size | HTML + JS |
+| 15 | `getReportHTML` | — | — | — | — | empty file (0 bytes) |
+| 16 | `replaceTemplateTags` | Fill e-mail template | `:6` | none | — | XML |
+| 17 | `setCandidateJobOrderRating` | Pipeline rating | `:33` | `pipelines.editRating ≥ EDIT` `:35` | update | XML |
+| 18 | `setColumnWidth` | Save grid column width | `:30` | none | DB preference `:46` | XML |
+| 19 | `showTemplate` | E-mail template body | `:5` | none | — | XML |
+| 20 | `testEmailSettings` | Send a test e-mail | `:33` | none | sends mail `:86-93` | XML (RT-04 fatal text at #77) |
+| 21 | `zipLookup` | City/state via Google | **none** (`:9`) | n/a | outbound HTTP | XML |
+| 22 | `import:processMassImportItem` | Next 50 bulk-import files | `:33` | none (session state from `ImportUI`) | creates attachments `:62-65` | text |
+| 23 | `install:ui` | Installer steps | **none**; refuses when `INSTALL_BLOCK` exists `:55` | n/a | rewrites `config.php`, resets DB | HTML + script |
+| 24 | `install:maint` | Includes `index.php` with `$maintPage` | **none** (`maint.php:30-37`) | n/a | deletes `modules.cache`; one pending migration per call | HTML + script |
+| 25 | `install:attachmentsReindex` | Re-extract all attachment text | only if `INSTALL_BLOCK` exists `:32-35` | SA, same condition `:52` | bulk UPDATE | text |
+| 26 | `install:attachmentsToThreeDirectory` | 0.x storage migration | `:33` | ROOT `:35` | ALTER + file moves | — |
+| 27–30 | `lists:addToLists`, `deleteList`, `editListName`, `newList` | Saved lists | `:63` / `:36` | none | yes | XML |
+| 31 | `settings:backup` | Full or attachments backup | `:34` | SA `:36` | writes zip + `progress.txt` under `attachments/` | HTML + script |
+| 32 | `tests:getCandidateJobOrderID` | Test helper | `:33` | none | — | XML |
+
+**Totals (re-verified by grep):** 32 files; 27 use `SecureAJAXInterface`, 2 the public `AJAXInterface`, 3 neither (`getReportHTML` empty, `install:ui` and `install:maint`). Access-level checks: 4 handlers (`setCandidateJobOrderRating`, `settings:backup`, `install:attachmentsToThreeDirectory`, conditionally `install:attachmentsReindex`) plus row actions in `getPipelineJobOrder`. About 15 handlers change persistent state. Machine-facing actions routed through `index.php` are listed in Reference R2.
+
+### API-005 — State-changing AJAX handlers check login only, not access level
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-026, ARCH-007, TEST-004*
+
+- **Confirmed fact:** `SecureAJAXInterface` enforces only "logged in". Handlers that delete or modify data (`deleteActivity`, `editActivity`, the four `lists:*` handlers, `setColumnWidth`, `import:processMassImportItem`) and `testEmailSettings` (sends mail with a caller-chosen From address) perform no access-level check, while the equivalent page actions are gated in the UI (e.g. the delete-activity link is shown only at `contacts.deleteActivity ≥ EDIT` or `candidates.delete ≥ DELETE`). `m=settings&a=ajax_tags_add|del|upd` likewise skip the SA check that the Tags page applies.
+- **Evidence:** `lib/AJAXInterface.php:202-222`; `ajax/deleteActivity.php:33-47`; `ajax/editActivity.php:36,113`; `modules/lists/ajax/deleteList.php:36-51`; `ajax/testEmailSettings.php:33,62,73,86-93`; `modules/settings/SettingsUI.php:232`, `:675-700`; `modules/contacts/Show.tpl:287`, `modules/candidates/Show.tpl:611`.
+- **Impact:** Access levels are enforced in the presentation layer only; a low-privileged user's permissions are wider through the RPC than through the pages. Exploitability and impact are assessed in SEC-026.
+- **Severity:** HIGH — authorization gap with the precondition of a valid low-privileged account.
+- **Recommendation:** Give every RPC handler the same access requirement as its page counterpart, enforced before the handler runs, so the RPC cannot do more than the UI allows.
+- **Unknown / needs further validation:** Actual behaviour for READ/EDIT/sourcer accounts (baseline used only `admin`). Needs authorized security testing on an isolated instance.
+
+### API-006 — No CSRF protection; `ajax.php` accepts GET; no SameSite on the session cookie
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-004, SEC-007, SEC-015*
+
+- **Confirmed fact:** `grep` for `csrf|xsrf|nonce|form_token` finds nothing. `ajax.php` and handlers read `$_REQUEST`, so state-changing calls work over GET. The PHP session cookie is started with default parameters (`session_set_cookie_params` is never called); `lib/Session.php:899` defines `$samesite = 'Strict'` but never passes it, and sets an unrelated `session_cookie`. The session ID is also printed into pages via `getCookie()`.
+- **Evidence:** `ajax.php:63`, `:76-92`; `lib/Session.php:555-558`, `:893-903`; `js/lib.js:332-352`; `config.php:151`. The baseline nginx image adds `Access-Control-Allow-Origin: *` to responses (`ENVIRONMENT.md` §2); the app itself sets no CORS headers.
+- **Impact:** Any site a logged-in user visits can trigger state-changing calls in their session (details and severity context in SEC-004).
+- **Severity:** HIGH — cross-site request forgery against all state-changing endpoints, with the precondition of a logged-in victim.
+- **Recommendation:** Require a per-session anti-forgery token and a non-GET method for every state-changing call, and set restrictive cookie attributes, so requests from other sites cannot act in a user's session.
+- **Unknown / needs further validation:** Effective cookie attributes and headers on real deployments (they depend on `php.ini` and the web server). Needs a review of deployed configurations; no testing was done here.
+
+### API-007 — `getDataGridPager` identifier sanitiser is ineffective
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-027*
+
+- **Confirmed fact:** `ajax/getDataGridPager.php:43-58` passes `$_REQUEST['i']` to `DataGrid::get()`, which "sanitises" the module and class parts with `preg_replace("[^A-Za-z0-9]", "", …)`. Without delimiters PHP treats `[`…`]` as the delimiters, so the pattern only removes the literal prefix `^A-Za-z0-9`; on PHP 8.4 a test string containing `../` path segments is returned unchanged. The values then reach `include_once(sprintf('modules/%s/dataGrids.php', $module))` and `new $class(…)`. The same path backs `m=export&a=exportByDataGrid`.
+- **Evidence:** `lib/DataGrid.php:267-268`, `:275-282`, `:295-303`; `modules/export/ExportUI.php:135-140`; read-only `php -r` check on PHP 8.4. The dispatcher's own sanitiser (`ajax.php:78,88-89`) uses correct delimiters.
+- **Impact:** A logged-in user controls part of an include path and which class is instantiated. Whether this leads further depends on files present on the server (SEC-027).
+- **Severity:** HIGH — authenticated control over include and instantiation.
+- **Recommendation:** Resolve grid identifiers only against a fixed list of known grids, so request data never becomes a path or class name.
+- **Unknown / needs further validation:** Exploitability depends on the server's file layout. Needs authorized security testing on an isolated instance.
+
+### API-015 — AJAX response contract is inconsistent; PHP errors returned as HTTP 200
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: ARCH-020, RT-04, RT-15, SEC-005*
+
+- **Confirmed fact:** Errors come in three shapes: the XML envelope (`<errorcode>`/`<errormessage>`, message not escaped), bare text via `die()`, and HTML. Codes are magic numbers (`-1`, `-2`). Several handlers interpolate DB values into XML without escaping; others use `htmlspecialchars` or `rawurlencode`. There is no version, schema or content negotiation. The JS client detects server failure by searching the body for PHP's HTML error text. The dispatcher strips leading whitespace from every buffered line, which alters `<pre>`/textarea content unless `nospacefilter` is sent.
+- **Evidence:**
+  - `lib/AJAXInterface.php:61-69`, `:77-86`; `ajax/editActivity.php:77`; `ajax/getCandidateIdByPhone.php:36`; `ajax/getCompanyContacts.php:64-66`; `ajax/getParsedAddress.php:136-155`; `ajax.php:120-123`; `js/lib.js:443-446`.
+  - Runtime, RT-04 / #77: "Send Test E-Mail" returned the PHP fatal page (stack trace, SMTP error) inside the AJAX response with HTTP 200, and the UI displayed it in the result box. All 42 `ajax.php` calls in the final run returned 200 (`nginx.log`).
+- **Impact:** Names containing `&` or `<` can break the XML parse or inject markup into the page; failures cannot be told apart by status code; no third party could consume the contract reliably.
+- **Severity:** MEDIUM — fragile contract with an injection side effect (rated in SEC-005).
+- **Recommendation:** Give the RPC one response envelope with consistent escaping and real HTTP status codes, so the client and any future consumer can detect errors without parsing PHP output.
+- **Unknown / needs further validation:** Which handlers break on special characters in stored data. Needs a test data set with such characters on an isolated instance.
+
+### API-019 — [Merged into ARCH-001] PHP ≥ 8.0 fatals on every machine-facing entry point
+The `get_magic_quotes_*()` calls in `ajax.php:50,56`, `index.php:93,99` and `QueueCLI.php:59,65` are one of the PHP 8 blockers listed in ARCH-001 (Reference R5 of `ARCHITECTURE.md`).
+
+### API-021 — Almost no automated coverage of any interface
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: TEST-004, TEST-006, TEST-012*
+
+- **Confirmed fact:** CI runs PHPUnit and the Behat `default` and `security` suites. No Behat feature calls `ajax.php`, careers, RSS, XML, graphs or the toolbar; the only matching lines in `test/features` are commented out. Interface-related unit tests are limited to `AJAXInterfaceTest` (ID validators) and `VCardTest`. The in-app SimpleTest AJAX tests are not run in CI and several are empty stubs.
+- **Evidence:** `test/runAllTests.sh`; `.github/workflows/ci.yml`; `test/features/GET_POST_requestsSecurity.feature:1331-1370` (commented); `modules/tests/testcases/AJAXTests.php:380-927`; `src/OpenCATS/Tests/UnitTests/AJAXInterfaceTest.php`.
+- **Impact:** RT-05 (RSS fatal), RT-03 (forgot password), RT-04 (mail fatals) and API-002/003/005 were not caught by any test. Any change to an interface has no safety net.
+- **Severity:** MEDIUM — high change risk on every interface.
+- **Recommendation:** Cover each RPC handler and public endpoint with contract-level tests (authentication, access level, response shape), so interface behaviour is pinned before anything is changed.
+- **Unknown / needs further validation:** Whether the CI Behat suites currently pass (TESTING_AUDIT owns this). Needs CI run history.
+
+### API-022 — In-app SimpleTest harness runnable by any logged-in user against the live database
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: TEST-009, ARCH-015*
+
+- **Confirmed fact:** `m=tests` requires login only; `a=runSelectedTests` runs the SimpleTest web and AJAX suites against the running instance and its database, with no access-level check. `tests:getCandidateJobOrderID` is exposed through `ajax.php`. The module is discovered and instantiated on every new session.
+- **Evidence:** `modules/tests/TestsUI.php:41-46`, `:65`, `:79-94`, `:104-125`; `modules/tests/ajax/getCandidateJobOrderID.php:33`; RT-02 (23 modules, including `tests`, queried at discovery).
+- **Impact:** Any user can run test code that creates or changes production data; production carries an unnecessary surface.
+- **Severity:** MEDIUM — data-integrity risk requiring a valid account.
+- **Recommendation:** Keep test harnesses out of production builds, so no production user can run them.
+- **Unknown / needs further validation:** What the suites write when run against a real database. Needs a run on an isolated copy.
 
 ---
 
 ## 3. Public (unauthenticated) surfaces
 
-The router decides which modules skip authentication by calling `ModuleUtility::moduleRequiresAuthentication()` (`index.php:195`, `:256-259`; `lib/ModuleUtility.php:109-135`). These modules set `_authenticationRequired = false`: `xml` (`XmlUI.php:54`), `wizard` (`:46`), `graphs` (`:48`), `toolbar` (`:46`), `rss` (`:49`), install `CATSUI` (`:36`), `careers` (`:53`), and `login` (`:43`). The careers, RSS, and XML modules are also forced on by the `$careerPage`, `$rssPage`, and `$xmlPage` globals, or by `?showCareerPortal=1` (`index.php:176-191`).
+**As built.** `index.php` skips authentication for modules whose `_authenticationRequired` is `false`: `careers`, `graphs`, `install`, `login`, `rss`, `toolbar`, `wizard`, `xml` (`index.php:195`, `:256-259`; `lib/ModuleUtility.php:109-140`). `careers`, `rss` and `xml` are also forced by the `$careerPage`/`$rssPage`/`$xmlPage` shim flags or `?showCareerPortal=1` (`index.php:176-191`). Outside `index.php`, `ajax.php?f=getParsedAddress|zipLookup|install:*`, `QueueCLI.php`, `rebuild_old_docs.php`, `installtest.php` and stored files under `attachments/` are reachable without a session (RT-17 for the last).
 
-### 3.1 Careers portal (`careers/index.php` → `modules/careers/CareersUI.php`)
-- **Entry points:** `careers/index.php:34-39` (`chdir('..')`, then includes `config.php` and `index.php`); `index.php?m=careers`; `index.php?showCareerPortal=1`.
-- **Site selection:** single-tenant. `Site(-1)->getFirstSiteID()` is used unless a `CAREERS_SITEID` hook overrides it (`CareersUI.php:77-81`).
-- **Enabled check:** if the portal is disabled, the response is `<!-- Job Board Disabled -->` (`:98-103`). The default is `enabled => '0'` (`lib/CareerPortal.php:77`).
-- **Template override:** any visitor can switch templates with `?templateName=` (`:106-109`).
-- **Job list source:** `JobOrders::getAll(JOBORDERS_STATUS_SHARE, …, onlyPublic=true)` (`:118`).
+| Surface | What it does | Runtime (baseline) |
+|---|---|---|
+| Careers portal `careers/index.php?p=…` | Job list, job detail, apply with résumé upload, questionnaire, optional candidate registration/profile | Works after enabling (#80–#86); blank until enabled (RT-16); applicant sees fatal on mail failure (RT-04); unstaged résumé dropped (RT-12) |
+| XML job feed `xml/?t=<template>` | Pull feed of public job orders (Indeed, SimplyHired templates) | Works, `text/xml` (#89) |
+| RSS feed `rss/` | RSS 2.0 of public job orders | Fatal (RT-05, #88) |
+| Graphs `m=graphs&a=testGraph\|wordVerify\|jobOrderReportGraph\|generic\|genericPie` | Render images from GET data | Used by the PDF report (RT-09); public by design (ARCH-026) |
+| Toolbar `m=toolbar&a=…` | Legacy Firefox toolbar protocol | Not tested |
+| Wizard `m=wizard&a=ajax_getPage` | Evaluates wizard code stored in the session | Not tested |
+| Installer AJAX, `QueueCLI.php`, `rebuild_old_docs.php`, `installtest.php` | Install/maintenance | Not tested |
 
-| `p=` / `pa=` | Method | Purpose | Notes |
+### 3.1 Careers portal
+
+**As built.** Site is always `Site::getFirstSiteID()` (`CareersUI.php:79`). Disabled portals return `<!-- Job Board Disabled -->` (`:98-103`; default `enabled => '0'`, `lib/CareerPortal.php:77`). Any visitor can switch the template with `?templateName=` (`:106-108`). Jobs come from `JobOrders::getAll(…, onlyPublic)` (`:118`). The page map is in Reference R4. `p=search` renders the search template (#83) but the `search` and `searchResults` branches are empty (`:180-182`, `:856-858`), so no job search is performed.
+
+### API-002 — Careers "apply" trusts a client-supplied `candidateID`
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-024, API-003, DB-011*
+
+- **Confirmed fact:** The public application form carries `candidateID` in a hidden field. On submit the value is read from POST and passed to `onApplyToJobOrder()`, which, when it is set, updates that existing candidate with the submitted personal data, sets the owner to the automated user, then attaches files, adds a pipeline row and logs an activity. Nothing ties the submitter to that candidate, and this path does not depend on candidate registration being enabled.
+- **Evidence:** `modules/careers/CareersUI.php:699,710` (hidden field), `:725-726`, `:750`, `:1190`, `:1279-1293`; `lib/Candidates.php:249-254` (update scoped only by `site_id`). Runtime: only the new-applicant path was exercised (#85, #86: new candidates created); no security testing was done.
+- **Impact:** Anyone who can reach an enabled careers portal with one public job can alter existing candidate records (personal data, ownership, attachments). Details: SEC-024.
+- **Severity:** CRITICAL — an unauthenticated actor can corrupt core recruiting data.
+- **Recommendation:** Never accept a candidate identity from the client on the public portal; derive it only from server-side verified state, so a public form cannot address existing records.
+- **Unknown / needs further validation:** Whether any installation has been affected. Needs authorized security testing on an isolated instance and a review of candidate history on real data.
+
+### API-003 — Careers returning-candidate update passes misaligned arguments
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: ARCH-011, DB-011*
+
+- **Confirmed fact:** `Candidates::update()` takes 32 positional parameters ending `…, $owner, $isHot, $email, $emailAddress, $gender, $race, $veteran, $disability`. The careers call passes `…, $automatedUser['userID'], $automatedUser['userID'], $gender, $race, $veteran, $disability`, so `isHot` receives a user ID, the notification body and address receive the gender and race values, `gender`/`race` receive the veteran and disability values, and `veteran`/`disability` fall back to `''`. Because the address slot is non-empty, the update tries to send an "Ownership Change" e-mail to that value. The registered-profile path passes the candidate's e-mail in both e-mail slots, so each profile update mails the candidate an ownership-change notice.
+- **Evidence:** `lib/Candidates.php:249-254`, `:341-351`; `modules/careers/CareersUI.php:1284-1290`, `:298-332`. Not exercised at runtime (returning candidates and registration were not tested, `SMOKE_TEST.md` §4).
+- **Impact:** EEO data is silently corrupted, candidates are wrongly flagged hot, and spurious or failing mail is triggered (with PHPMailer in exception mode, a fatal after the DB write; see API-011).
+- **Severity:** HIGH — silent corruption of compliance-relevant data.
+- **Recommendation:** Fix the argument order in both careers calls and stop passing long positional lists for this update, so fields land in the right columns.
+- **Unknown / needs further validation:** How many stored records carry shifted EEO values. Needs a read-only check of real data.
+
+### API-004 — Careers registered-candidate login is a forgeable knowledge-based cookie
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-025*
+
+- **Confirmed fact:** When candidate registration is enabled (off by default), a returning candidate is identified by matching template fields (for the default template: e-mail, last name, ZIP) from POST or from a client-side cookie `cats<siteID>cw`; no secret is involved. The profile handler then updates the profile and deletes an attachment chosen by `$_GET['attachmentID']`; `Attachments::delete()` is scoped by site only, not by candidate.
+- **Evidence:** `modules/careers/CareersUI.php:1629-1763`, `:259-358` (`:291`, `:340`); `lib/Attachments.php:304-335`; `lib/CareerPortal.php:79` (`candidateRegistration => '0'`); `db/cats_schema.sql:440`.
+- **Impact:** With registration enabled, knowledge of a candidate's basic details is enough to edit their profile, and file deletion is not limited to the candidate's own files (SEC-025).
+- **Severity:** HIGH — account takeover and deletion with the precondition that registration is enabled.
+- **Recommendation:** Require a verified, server-side session for returning candidates and limit profile actions to that candidate's own records.
+- **Unknown / needs further validation:** How many installations enable registration. Needs field data; authorized testing on an isolated instance.
+
+### API-023 — Careers apply endpoint silently discards a chosen résumé unless it was staged
+*Confirmation: **Runtime** · New in this edition · Related: RT-12, API-002, UX findings*
+
+- **Confirmed fact:** The apply form's visible file input is `resumeFile`. Its "Upload" button posts it with `applyToJobSubAction=resumeLoad`, stores it, and writes the stored name into a hidden `file` field. The final submit (`p=onApplyToJobOrder`) only attaches `$_FILES['file']` or `$_POST['file']`; a file chosen in `resumeFile` but not uploaded is ignored without any message.
+- **Evidence:** `modules/careers/CareersUI.php:498`, `:601-602` (field names), `:1351-1402` (final submit reads only `file`). RT-12: applicant Jordan (#85, file chosen, submitted) → candidate and pipeline created, no attachment; applicant Morgan (#86, Upload then submit) → attachment stored and searchable (#87).
+- **Impact:** Applicants who skip the extra click lose their résumé; recruiters receive applications without CVs and the applicant is not told.
+- **Severity:** HIGH — silent loss of applicant data in the core public workflow.
+- **Recommendation:** Make the final submission accept the file the applicant selected (or refuse the submission with a clear message), so a chosen résumé is never dropped silently.
+- **Unknown / needs further validation:** Behaviour on other browsers and with the questionnaire step enabled. Needs a UI test with those variations.
+
+### 3.2 Job syndication feeds
+
+**As built.** `xml/?t=<name>` matches `xml_feeds.xml_template_name` (seeded `indeed`, `simplyhired`; `db/cats_schema.sql:1173-1174`), renders `.xtpl` templates with `$[tag]` placeholders (`lib/XmlJobExport.php:125-218`) and logs each hit to `http_log` (`XmlUI.php:117-120`). `rss/` (and `index.php?m=rss`) emits RSS 2.0 (`modules/rss/RssUI.php:99-156`). Both are pull-only: `XmlTemplate::submitXMLFeeds()` is a hook stub that nothing calls, and `xml_feeds.post_url`/`success_string` are never read.
+
+### API-012 — Job syndication: RSS entry point fatal; feeds ignore settings, escape wrongly, hard-code employer data
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: RT-05, RT-16, ARCH-022, ARCH-013, ARCH-008*
+
+- **Confirmed fact:**
+  - (a) `rss/index.php` uses `LEGACY_ROOT` before loading config and fails; the careers "RSS Feed" button links to it.
+  - (b) The XML feed sends `CATS (www.catsone.com)` as the hiring company for every job, `US` as the country and an empty postal code, instead of the job order's company and address.
+  - (c) Feed values are HTML-encoded and then placed inside `CDATA`, so they are double-encoded (e.g. the job URL contains literal `&amp;`); RSS writes title, city and state without any escaping.
+  - (d) Neither feed checks the career portal's `enabled` flag, which the careers page does; RSS also ignores `allowBrowse`.
+  - (e) Absolute links are built from the client `Host` header; feeds serve only the first site; `rss.xtpl` cannot be selected (not seeded); a `notes` tag would expose internal job-order notes if an admin added it to a template; push submission is a stub.
+- **Evidence:**
+  - (a) `rss/index.php:37`; RT-05 / #88 (HTTP 200, fatal "Class 'CATSUtility' not found").
+  - (b), (c) `modules/xml/XmlUI.php:255-261`, `:280-294`; `lib/XmlJobExport.php:218`; `modules/xml/xml_templates/indeed.xtpl:14-23`; runtime #89 (`screenshots/89-12-careers-portal-xml-job-feed.png`): `<company>` is `CATS (www.catsone.com)` although the job belongs to "Baseline Test Co (TEST)", `<country>` `US`, empty `<postalcode>`, and `<url>` `http://localhost:8080/careers/?p=showJob&amp;ID=1&amp;ref=indeed` inside CDATA.
+  - (c) `modules/rss/RssUI.php:140-150`; (d) `modules/careers/CareersUI.php:98-103` vs `XmlUI.php:105-190`, `RssUI.php:99-156`; (e) `lib/CATSUtility.php:220-240`, `XmlUI.php:107`, `RssUI.php:103`, `XmlUI.php:304-310`, `lib/XmlJobExport.php:108-111`.
+  - Static only: (d) and (e) were not exercised (the XML feed was requested after the portal was enabled, #75).
+- **Impact:** Job boards receive the wrong employer and location data and broken links; the RSS feed is unusable; feeds may publish jobs while the portal is disabled; feed readers see a failure as HTTP 200.
+- **Severity:** MEDIUM — a public distribution feature is partly broken and publishes wrong data.
+- **Recommendation:** Build feed values from the job order's own data with one XML-correct escaping step, honour the portal settings, and repair the RSS entry point, so syndicated postings are accurate and controlled by the administrator.
+- **Unknown / needs further validation:** How current job boards ingest this format (Indeed/SimplyHired specifications have changed since 2007, external knowledge). Needs validation with the boards' current feed validators.
+
+### 3.3 Toolbar, maintenance endpoints and abuse controls
+
+### API-009 — Legacy Firefox-toolbar API
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-010, ARCH-019*
+
+- **Confirmed fact:** `index.php?m=toolbar` is a public module. `a=getLicenseKey` prints `LICENSE_KEY` without authentication; `a=authenticate` logs in with `CATSUser`/`CATSPassword` taken from GET and is gated on `LicenseUtility::isProfessional()`, which always returns `true`; `a=attemptLogin` calls a method `ToolbarUI` does not have (fatal); `storeMonsterResumeText` scrapes 2007-era Monster.com markup. The client was a legacy XUL Firefox extension (external knowledge: such extensions stopped working with Firefox 57 in 2017).
+- **Evidence:** `modules/toolbar/ToolbarUI.php:37`, `:46`, `:57-86`, `:95-96`, `:114`, `:282-285`; `config.php:31`.
+- **Impact:** A dead feature that exposes a (committed) licence key, encourages credentials in URLs and logs, and adds an unauthenticated login surface.
+- **Severity:** MEDIUM — limited-scope exposure on an obsolete interface.
+- **Recommendation:** Retire or disable the toolbar interface, since it has no working client and only adds exposure.
+- **Unknown / needs further validation:** Whether any user still has a working client. Needs field data.
+
+### API-008 — Maintenance and operations endpoints reachable without authentication
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-028, ARCH-006, ARCH-016, ARCH-005*
+
+- **Confirmed fact:** `ajax.php?f=install:maint` has no guard; it deletes `modules.cache` and includes `index.php` in maintenance mode, which applies one pending migration step per call. `install:attachmentsReindex` authenticates only when `INSTALL_BLOCK` exists. `QueueCLI.php` and `rebuild_old_docs.php` have no SAPI or authentication check; the latter re-extracts text for unindexed attachments and prints stored filenames. `install:ui` rewrites `config.php` from request data whenever `INSTALL_BLOCK` is absent (by design during installation).
+- **Evidence:** `modules/install/ajax/maint.php:30-37`; `lib/ModuleUtility.php:517-536`; `modules/install/ajax/attachmentsReindex.php:32-35`, `:52`; `QueueCLI.php:26-86`; `rebuild_old_docs.php:14-65`; `modules/install/ajax/ui.php:55`, `:120-135`.
+- **Impact:** Anonymous visitors can trigger migrations, bulk conversion work and queue runs, and learn internal filenames (SEC-028). A missing `INSTALL_BLOCK` turns the installer into an open configuration writer.
+- **Severity:** MEDIUM — resource abuse and information disclosure; the configuration-writer case needs a missing lock file.
+- **Recommendation:** Make maintenance operations available only to authenticated administrators or the command line, so they cannot be started from the public web.
+- **Unknown / needs further validation:** Whether real web servers expose these scripts (no web-server rules ship with the repo) and whether `INSTALL_BLOCK` reliably exists after install. Needs a review of deployed configurations.
+
+### API-014 — No rate limiting or abuse controls on public endpoints
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-014, PERF-013, ARCH-026*
+
+- **Confirmed fact:** `grep` for `rate.?limit|throttl|lockout|captcha` finds only an unused CAPTCHA image renderer (`m=graphs&a=wordVerify`). Careers apply creates candidates, attachments, pipelines and activities and sends the confirmation template to the applicant-supplied address without any throttle or challenge. Public graph actions render images from request data up to about 2000 × 1200 px. Login and toolbar login have no attempt throttling.
+- **Evidence:** `modules/careers/CareersUI.php:1190-1600` (confirmation mail `:1518-1523`); `modules/graphs/GraphsUI.php:53-66`, `:76-98`; `lib/GraphGenerator.php:432-445`; `modules/toolbar/ToolbarUI.php:95-103`. RT-04 (#85, #86) shows the applicant confirmation is sent synchronously during the apply request.
+- **Impact:** The portal can be used to fill the database with junk applications, to send the confirmation e-mail to arbitrary addresses, and to consume CPU; login can be brute-forced (SEC-014).
+- **Severity:** MEDIUM — abuse potential on public endpoints without a direct data compromise.
+- **Recommendation:** Add request-rate and anti-automation controls to the public write and render endpoints and to login, so public surfaces cannot be used for spam, junk data or resource exhaustion.
+- **Unknown / needs further validation:** Whether a front proxy provides rate limiting in real deployments. Needs deployment data.
+
+---
+
+## 4. Integrations
+
+**As built.** All integrations are outbound calls made synchronously inside user requests, configured by constants in `config.php`; none has retries, timeouts managed by the app (except the version check's 5 s socket timeout), health reporting or tests.
+
+| Integration | Protocol / direction | Configuration and auth | Status (evidence) |
 |---|---|---|---|
-| (none) | GET | Main page and registered-candidate login block | `:856-935`; postback `?postback=yes` runs `ProcessCandidateRegistration` |
-| `showAll` | GET | Job list | `:151-179`; honours `allowBrowse` |
-| `search`, `searchResults` | GET | Search | `:180-182` and `:856` are empty branches, so search is not implemented |
-| `showJob&ID=` | GET | Job details | `:793-855`; checks `public`, not status |
-| `candidateRegistration&ID=` | GET | "Have you applied before?" gate | `:359-411`; only when registration is enabled |
-| `applyToJob&ID=` (+ `applyToJobSubAction=processLogin|resumeLoad|resumeParse`) | POST | Application form; loads or parses a résumé | `:412-714`; `resumeParse` calls Resfly (`:521-541`, see API-010) |
-| `onApplyToJobOrder` (+ `questionnairePostBack=1`) | POST multipart | Create or update the candidate, attach the résumé, add to pipeline, add activity, run the questionnaire, send 2–3 e-mails | `:715-792`, `onApplyToJobOrder()` at `:1190-1600` |
-| `registeredCandidateProfile` / `pa=updateProfile` | GET | Show own profile | `:183-258` |
-| `onRegisteredCandidateProfile&attachmentID=` | POST | Update profile and replace the résumé | `:259-358` |
-| `pa=logout` | POST | Clear the portal cookie | `:134-141` |
+| E-mail (PHPMailer 6.8.0) | Out: SMTP (default `localhost:587`, TLS, auth), sendmail or `mail()` | `config.php:208-225`; `lib/Mailer.php:314-351` | Every send failed with an uncaught exception in the baseline (no relay; RT-04) — API-011 |
+| LDAP | Out: `ldap://` :389, no StartTLS | `config.php:264-284`; `lib/LDAP.php` | Optional (`AUTH_MODE='sql'` default); not tested — API-016 |
+| Resfly résumé parsing | Out: SOAP 1.1 over HTTP to `soap.resfly.com` | `wsdl/parse.wsdl:78`, `status.wsdl:69`; licence key in body | Host did not resolve (Phase 0 sandbox probe); parser UI shown (#22) — API-010 |
+| Google geocoding (ZIP → city/state) | Out: HTTP GET, no key | `lib/ZipLookup.php:23-26` | Keyless requests refused (Phase 0 probe) — API-013 |
+| Local ZIP radius search | DB table `zipcodes` | `db/upgrade-zipcodes.sql`; `US_ZIPS_ENABLED` | Optional; installed only by the installer option |
+| Version check / telemetry | Out: raw socket HTTP to `www.catsone.com:80`, sends version, UID, site name, active users, licence key | `lib/NewVersionCheck.php:100-122`, `:198-224` | Off via seeded `system.disable_version_check=1` (`db/cats_schema.sql:1044`); column default 0 |
+| Sphinx search | Out: binary protocol to `localhost:3312` | `config.php:97-101`; 2007 client | Off by default (`ENABLE_SPHINX=false`) |
+| Document converters | Local `exec` of antiword/pdftotext/html2text | `config.php:62-81` (placeholders) | PDF extraction fails by default (RT-08); ODT always fails (ARCH-018) |
+| Job boards | Out: pull feeds | §3.2 | XML works with wrong employer data (#89); RSS fatal (RT-05) |
+| Calendar sync | none (no iCal/CalDAV; `grep VCALENDAR` empty) | — | Absent |
+| Webhooks / events | none | — | Absent (API-017) |
+| Google Maps link | Plain link on company page | — | Link only |
 
-- **Questionnaire:** `Questionnaire::doActions($questionnaireID, $candidateID, $_POST)` (`:1339-1345`).
-- **Uploads:** `AttachmentCreator::createFromUpload(…'file'…)` (`:1351-1373`), or a staged file named by `$_POST['file']` (`:1375-1402`).
-- **E-mails sent:**
-  - `EMAIL_TEMPLATE_CANDIDATEAPPLY` to the applicant-supplied address (`:1473-1523`);
-  - `EMAIL_TEMPLATE_CANDIDATEPORTALNEW` to the job owner and the recruiter (`:1528-1600`).
+Integration details not covered by a finding below:
 
-### 3.2 RSS (`rss/index.php` → `modules/rss/RssUI.php`)
-- **Actions:** only `jobOrders`, which is also the default (`RssUI.php:57-67`).
-- **Output:** RSS 2.0 containing public, shareable job orders: `<title>`, type, "Located in city, state", and a link to `careers/?p=showJob&ID=` (`:99-156`).
-- **Broken entry point:** `rss/index.php` does not include `config.php`, yet uses `LEGACY_ROOT` at `rss/index.php:37`. It fails fatally; see API-012. The module is still reachable through `index.php?m=rss`.
-- The careers templates link to `../rss/` or `rss/` (`CareersUI.php:949`, `:953`).
+- **LDAP** (`lib/LDAP.php`, `lib/Users.php:823-850`): used when `AUTH_MODE` is `ldap` or `sql+ldap`; unknown directory users are auto-provisioned as disabled local accounts; empty passwords are rejected before bind. Weaknesses in API-016 / SEC-006.
+- **Version check** (`lib/NewVersionCheck.php`): once a day at most; when a newer version is recorded, SA users see a link to `www.catsone.com/download.php` (`lib/TemplateUtility.php:173-180`); enabled wherever the seeded `system` row is missing. Covered by ARCH-019 / SEC-017.
+- **Mass e-mail** is sent with `new Mailer(CATS_ADMIN_SITE)` (`modules/candidates/CandidatesUI.php:3320`), i.e. under the hosted-admin site ID rather than the user's site; the effect on `email_history` attribution was not verified.
+- **Calendar reminders** go through the queue (`modules/calendar/tasks/Reminders.php:93` → `lib/Calendar.php:952-966`) and need the scheduler (ARCH-016).
 
-### 3.3 XML job feeds (`xml/index.php` → `modules/xml/XmlUI.php`)
-- **Template selection:** `?t=<name>` is matched against `xml_feeds.xml_template_name` in the database (`XmlUI.php:127-148`, `lib/XmlJobExport.php:51-70`). The default is the first row, `indeed`.
-- **Seeded rows:** Indeed and SimplyHired (`db/cats_schema.sql:1173-1174`).
-- **Template files:** `modules/xml/xml_templates/{indeed,simplyhired,rss}.xtpl`, in a custom `>>section … <<section` format with `$[tag]` placeholders (`lib/XmlJobExport.php:125-203`).
-- **Placeholders:** `date`, `siteURL`, `jobTitle`, `jobPostDate`, `jobURL` (adds `&ref=<template>`), `jobOrderID`, `jobID`, `hiringCompany`, `jobCity`, `jobState`, `jobCountry`, `jobZipCode`, `jobDescription`, `notes`, `type` (`XmlUI.php:197-318`). Every value goes through `htmlspecialchars`, including values placed inside `CDATA` in `indeed.xtpl:14-23`, so they are double-encoded.
-- **Access logging:** each request is logged to `http_log` (`XmlUI.php:117-120`).
-- **Pull only:** `XmlTemplate::submitXMLFeeds()` is just a hook (`lib/XmlJobExport.php:108-111`) and is never called. `xml_feeds.post_url` and `success_string` are never read. The settings page only exposes a `CAREER_PORTAL_SUBMIT_XML_FEEDS` hook (`modules/settings/CareerPortalSettings.tpl:72`).
+### API-011 — Mail integration: uncaught exceptions, "disabled" mode still sends, forgot-password calls a missing method
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: RT-03, RT-04, SEC-002, ARCH-020, ARCH-027, PERF-005*
 
-### 3.4 `wsdl/`
-- **Contents:** three WSDL 1.1 RPC/SOAP **client** descriptors, served as static files:
-  - `parse.wsdl`: `DocumentParse(key, name, size, mimeType, contents)` at `http://soap.resfly.com/parse.php` (`wsdl/parse.wsdl:78`);
-  - `status.wsdl`: `Status(key)` at `http://soap.resfly.com/status.php` (`:69`);
-  - `keyCheck.wsdl`: `KeyCheck(key)` at `http://catsone.com/keyCheck.php` (`:66`).
-- **Users:** `lib/ParseUtility.php:53`, `:60`, and `:135` use the first two. Nothing references `keyCheck.wsdl`.
-- **No SOAP server:** `grep SoapServer` finds nothing. **OpenCATS exposes no SOAP API.** The folder is outbound-client configuration for a dead service (see API-010).
+- **Confirmed fact:** `Mailer` creates `new PHPMailer(true)` (exception mode) and calls `AddAddress()`/`Send()` without `try/catch`, so any SMTP or address failure is an uncaught exception after the caller's DB writes; the `if (!Send())` error path is unreachable in that mode. `MAIL_MAILER == 0` (disabled) is a no-op `case`, so direct senders (calendar reminders, test e-mail) still use PHPMailer's default transport; only template-driven sends check the flag. `SetLanguage()` points at a directory that does not exist. `LoginUI::onForgotPassword()` calls `Users::getPassword()` and constants `PASSWORD_RESET_SUBJECT`/`_BODY`, none of which exist. `Mailer` reads the web session for the user ID when none is passed.
+- **Evidence:**
+  - `lib/Mailer.php:76`, `:85`, `:96`, `:234`, `:241-247`, `:314-317`; `lib/EmailTemplates.php:350-357`; `modules/login/LoginUI.php:448-461`; `git grep` finds no `Users::getPassword` and no `PASSWORD_RESET_*` definition (only `FORGOT_PASSWORD_*` in `config.php:172-174`).
+  - RT-03 / #04: "Call to undefined method Users::getPassword()" with stack trace.
+  - RT-04 / #77, #79, #85, #86: "Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host" on test e-mail, candidate e-mail and careers apply (applicant sees the fatal; application already saved; `email_history` empty).
+- **Impact:** Every mail failure becomes a user-visible fatal, including on the public careers site; there is no password recovery at all; administrators cannot actually switch mail off.
+- **Severity:** HIGH — core workflows (password recovery, notifications, applications) fail or leave partial state.
+- **Recommendation:** Handle mail failures inside the mail layer, honour the disabled setting for every send, and replace the non-existent password-recovery flow with a working one (SEC-002 owns its security design).
+- **Unknown / needs further validation:** Behaviour with a reachable SMTP relay and rejected recipients. Needs a real SMTP relay in a test environment.
 
-### 3.5 Toolbar (`index.php?m=toolbar` → `modules/toolbar/ToolbarUI.php`)
-- **Purpose:** the text/JS protocol for the legacy CATS Firefox toolbar. The version is `TOOLBAR_LIB_VERSION = 32` (`:37`).
-- **Actions** (`:57-86`):
+### API-010 — Resfly SOAP parsing is dead but always "enabled"
+*Confirmation: **Partial** · Phase 0 severity: unchanged · Related: SEC-017, DEP-010, ARCH-019*
 
-| Action | Behaviour |
-|---|---|
-| `authenticate` | Logs in from `CATSUser` and `CATSPassword` in **GET** (`:95-103`). Requires `LicenseUtility::isProfessional()` (`:114`). Prints `cats_connected = true EVAL=<callback>` (`:133-137`) |
-| `getRemoteVersion` | Prints `99999`, meaning obsolete (`:140-145`) |
-| `getJavaScriptLib` | Serves `toolbarlibForLegacy.js` (`:148-156`) |
-| `checkEmailIsInSystem` | Prints `email:0` or `email:1` (`:158-184`) |
-| `storeMonsterResumeText` | Converts posted Monster.com page HTML to text using `html2text`, stores it in the session, and returns an ID (`:186-280`) |
-| `getLicenseKey` | Prints `LICENSE_KEY` **without authentication** (`:282-285`) |
-| `attemptLogin` | Calls `$this->attemptLogin()`, which is not defined in `ToolbarUI` or `UserInterface` |
+- **Confirmed fact:** `LicenseUtility::isParsingEnabled()` returns `true` on every branch; `PARSING_ENABLED=false` only skips the status call. Callers (`CandidatesUI` add/parse, careers `resumeParse`, mass import) then create `SoapClient('wsdl/parse.wsdl')` and send the licence key and the full résumé text over plain HTTP to `soap.resfly.com`. `SoapFault` is caught; a missing `soap` extension is not (class-not-found fatal).
+- **Evidence:**
+  - `lib/License.php:687-706`, `:708-727`; `config.php:51`; `lib/ParseUtility.php:53`, `:60`, `:87-101`; `wsdl/parse.wsdl:78`; `modules/careers/CareersUI.php:521-541`; `modules/candidates/CandidatesUI.php:841-872`, `:1005-1008`; `modules/import/ImportUI.php:1373-1416`.
+  - Runtime (verified part): with `PARSING_ENABLED=false`, the add-candidate page renders the parser layout ("Manually enter information / OR import resume", #22), i.e. `isParsingEnabled()` returned `true`.
+  - Not exercised: the SOAP call itself (no parse action in the smoke run; containers had no internet). The host did not resolve in the Phase 0 sandbox probe (outside the app).
+- **Impact:** The UI advertises a parser that cannot work; if the domain were ever re-registered by someone else, résumé text and the licence key from any install where a user parses would go to that party in cleartext; hosts without `soap` crash on these pages.
+- **Severity:** HIGH — potential cleartext disclosure of candidate PII to a third party, with the precondition of the domain being re-registered.
+- **Recommendation:** Make the parsing switch actually disable the integration and remove the dead service endpoint, so no candidate data can be sent to an unmaintained host.
+- **Unknown / needs further validation:** Current ownership of `resfly.com`. Needs a registry lookup; no traffic should be sent.
 
-- **Authentication** is a normal session login. There are no tokens.
+### API-013 — ZIP lookup proxies anonymously to a keyless Google API
+*Confirmation: **Partial** · Phase 0 severity: unchanged · Related: SEC-017, DEP-010*
 
-### 3.6 `js/index.php`, `attachments/index.php`
-Both are 0-byte files (`wc -c`) that stop directory listing. They are not endpoints. The `attachments/.htaccess` allows direct download of files with document or image extensions (`Require all granted`), which bypasses `AttachmentsUI`. `.htaccess` only takes effect on Apache; the repo's Docker setup uses nginx (`docker/docker-compose.yml`, image `prooph/nginx:www`), so the rules do not apply there (INFERENCE; the nginx configuration is not in the repo).
+- **Confirmed fact:** `ajax.php?f=zipLookup` uses the unauthenticated `AJAXInterface` and calls `simplexml_load_file('http://maps.googleapis.com/maps/api/geocode/xml?sensor=false&address=' . $zip)` with no key and no URL encoding; on failure it reads undefined variables, whose notices corrupt the XML when displayed.
+- **Evidence:** `ajax/zipLookup.php:9-38`; `lib/ZipLookup.php:14-60` (`:23-26` request). The keyless URL returned `REQUEST_DENIED` in the Phase 0 sandbox probe (outside the app). The "Lookup" button is on the add-candidate form (#22); it was not clicked in the smoke run and the baseline had no internet.
+- **Impact:** City/state autofill does nothing; anonymous users can make the server issue outbound requests.
+- **Severity:** MEDIUM — broken helper feature plus a minor outbound-request exposure.
+- **Recommendation:** Require login for the lookup and use a working, configured data source (the shipped `zipcodes` table exists), so the helper works and cannot be used anonymously.
+- **Unknown / needs further validation:** Behaviour of the endpoint with outbound internet. Needs a test instance with controlled egress.
 
-### 3.7 Other web-reachable scripts
-| Script | Behaviour over HTTP | Evidence |
+### API-018 — [Merged into ARCH-016] Queue/cron defects
+The cron dependency, duplicate task files, name-vs-path task storage and the duplicated `case TASKRET_SUCCESS` in `QueueCLI.php:115-118` are covered in ARCH-016.
+
+---
+
+## 5. Import and export
+
+**As built.** Import: CSV/TSV upload for candidates, companies and contacts (`modules/import/ImportUI.php:620-624`, `:699-703`; `lib/*Import.php`), with per-import revert (`ImportUI.php:69`), requiring `import.import ≥ EDIT` (`:742`); bulk résumé import reads files placed in `upload/` and processes 50 per AJAX call (`:1300-1327`, `import:processMassImportItem`), requiring `import.bulkResumes ≥ SA` (`:2027`). Export: candidate CSV (`m=export&a=export`) and any data grid (`exportByDataGrid`), quoted for `"` only; vCard 2.1 for contacts (`lib/VCard.php:54`, `:375`), gated `contacts.downloadVCard ≥ READ`. None of these were executed in the baseline.
+
+### API-020 — Candidate CSV export has no access check and no formula-injection guard; import is CSV/TSV only
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-022, ARCH-007, PERF-016*
+
+- **Confirmed fact:** `ExportUI` has no access-level check; with no IDs selected it exports every candidate's name, phones and e-mail. Cells are quoted only for `"`; values starting with `=`, `+`, `-` or `@` are not neutralised, and careers applicants control some of those values. Only candidates export through `Export`; other entities go through DataGrid. Import accepts CSV/TSV only, with no machine interface.
+- **Evidence:** `modules/export/ExportUI.php:60-66`, `:77-127` (`grep` finds no `getUserAccessLevel`); `lib/Export.php:132-139`, `:161`; `lib/DataGrid.php:1451`, `:1463`; `lib/Candidates.php:665-670`; `modules/import/ImportUI.php:620-624`.
+- **Impact:** Any logged-in user, including READ-only accounts, can export the whole candidate PII set; spreadsheets opened by recruiters may evaluate injected formulas.
+- **Severity:** MEDIUM — bulk PII access by low-privileged users and a spreadsheet-injection risk.
+- **Recommendation:** Put export behind an explicit permission and neutralise formula-leading characters in exported cells, so bulk PII access is deliberate and exported files are safe to open.
+- **Unknown / needs further validation:** Behaviour for non-admin roles and with large data sets. Needs authorized role-based testing and production-size data.
+
+---
+
+## Reference material
+
+### R1. `ajax.php` request and response contract
+
+| Aspect | Behaviour | Evidence |
 |---|---|---|
-| `QueueCLI.php` | Header says "should be called by cron … (not the website)", but there is no SAPI guard. It starts a session, registers tasks (`:78`), `print_r`s module data (`:80`), runs the next task (`:83`), and touches `queue.time` (`:86`) | `QueueCLI.php:27-29`, `:34-101` |
-| `rebuild_old_docs.php` | No authentication. Connects to the database, reconverts every attachment with `text IS NULL`, and prints stored filenames | `rebuild_old_docs.php:14`, `:16-50`, `:65` |
-| `scripts/makeBackup.php` | Runs `makeBackup()` when `$_SERVER['argv'][1]` is set. Over the web, argv exists only if `register_argc_argv` is on (INFERENCE) | `scripts/makeBackup.php:37-60` |
-| `installwizard.php`, `installtest.php` | Installer pages, locked by `INSTALL_BLOCK` | `installwizard.php:85`, `index.php:44` |
+| Method | Any; parameters from `$_REQUEST`. The JS client always POSTs `application/x-www-form-urlencoded` | `ajax.php:63`, `:76`; `js/lib.js:308-315`, `:342-366` |
+| Routing | `f=<fn>` → `ajax/<fn>.php`; `f=<module>:<fn>` → `modules/<module>/ajax/<fn>.php`; non-alphanumerics stripped (correct regex) | `ajax.php:76-92` |
+| Unknown / missing `f` | `text/xml` envelope with `errorcode -1` | `ajax.php:63-74`, `:94-105` |
+| Buffering | Output buffered; `AJAX_HOOK` eval; leading whitespace stripped per line unless `nospacefilter`; `$filters` eval; `nobuffer` bypasses all | `ajax.php:108-135` |
+| Session | `SecureAJAXInterface` starts the `CATS` session and requires login; client also sends `&CATS=<session id>` in the body | `lib/AJAXInterface.php:202-222`; `lib/Session.php:555-558`; `js/lib.js:332-352` |
+| Success envelope | `<data><errorcode>0</errorcode><errormessage></errormessage><response>…</response></data>` as `text/xml`, UTF-8 | `lib/AJAXInterface.php:47-53`, `:77-86`; `config.php:133` |
+| Error envelope | Same with non-zero code (`-1` invalid input/not logged in, `-2` no data/operation error, by convention); message not escaped | `lib/AJAXInterface.php:61-69` |
+| Other shapes | Plain text via `die()`, HTML fragments, CSV-like text | §2.1 |
+| Client error detection | Searches the body for `'</b> on line <b>'` | `js/lib.js:443-446` |
+| Timeout / caching | 15 s client timeout; random `rhash`; `Expires` in the past | `js/lib.js:50`, `:322-325`; `ajax.php:44-45` |
+| Versioning, schema | None | — |
 
----
+### R2. Machine-facing actions routed through `index.php`
 
-## 4. Is there a REST / JSON API?
+| Route | Returns | Auth / access check | Evidence |
+|---|---|---|---|
+| `m=settings&a=ajax_tags_add\|ajax_tags_del\|ajax_tags_upd` | HTML fragment | Login only (Tags page itself requires SA) | `modules/settings/SettingsUI.php:232`, `:675-700` |
+| `m=settings&a=ajax_wizard*` (11 actions) | Text/HTML | SA, except `ajax_wizardEmail` (READ, `:820`) | `SettingsUI.php:702-855` |
+| `m=wizard&a=ajax_getPage` | HTML; evaluates PHP stored in `$_SESSION['CATS_WIZARD']` | Public module; data from session | `modules/wizard/WizardUI.php:82`, `:181` |
+| `m=calendar&a=dynamicData&month&year` | Custom delimited event string | Login | `modules/calendar/CalendarUI.php:75`, `:305-338` |
+| `m=export&a=export\|exportByDataGrid` | CSV `text/x-csv` | Login only (API-020) | `modules/export/ExportUI.php:60-66`, `:125`; `lib/DataGrid.php:1463` |
+| `m=contacts&a=downloadVCard` | vCard 2.1 | `contacts.downloadVCard ≥ READ` | `modules/contacts/ContactsUI.php:175`; `lib/VCard.php:54`, `:375` |
+| `m=attachments&a=getAttachment&id&directoryNameHash` | File, `Content-Disposition: inline` | Login + MD5 of directory; site filter bypassed (ARCH-013) | `modules/attachments/AttachmentsUI.php:59`, `:83-86`, `:127-130`; runtime #29 (downloads 200, correct sizes) |
+| `m=import&a=massImport&step=…` | Text | `import.massImport ≥ EDIT` | `modules/import/ImportUI.php:1507` |
+| `m=graphs&a=testGraph\|wordVerify\|jobOrderReportGraph\|generic\|genericPie` | Image | **Public** | `modules/graphs/GraphsUI.php:76-98` |
+| `m=graphs&a=activity\|newCandidates\|newJobOrders\|newSubmissions\|miniPlacementStatistics\|miniJobOrderPipeline` | Image | Login | `GraphsUI.php:100-133`; runtime: 10 graph requests in the final run, all 200 |
+| `m=toolbar&a=…` | Text/JS | Public (API-009) | `modules/toolbar/ToolbarUI.php:57-86` |
 
-**No.**
-- **JSON:** `grep -rn "json_encode|json_decode|application/json"` over non-vendor PHP finds only `lib/DataGrid.php` (serialising grid parameters into URLs, e.g. `:272`, `:301`, `:729`) and `ajax/getDataGridPager.php:44`. No response anywhere is sent as `application/json`.
-- **Content types actually emitted:** `text/xml` (`ajax.php:65`, `:96`; `lib/AJAXInterface.php:49`; `RssUI.php:72`, `:111`; `XmlUI.php:77`, `:123`), `text/x-csv` (`ExportUI.php:125`, `DataGrid.php:1463`), `text/x-vCard` (`lib/VCard.php:375`), attachment MIME types (`AttachmentsUI.php:128`), PNG (artichow), and HTML.
-- **No other API styles:** there is no `SoapServer`, XML-RPC, or GraphQL; no API keys, bearer tokens, or `Authorization` header handling; and no CORS headers (all greps empty).
-- **What exists instead:**
-  - **Private UI RPC:** `ajax.php`, bound to the session, with no ACL layer, no versioning, and no documentation.
-  - **Public read-only syndication:** RSS and XML feeds of public job orders.
-  - **A public HTML form flow:** the careers portal.
-  - **File interchange:** CSV/TSV import, candidate CSV export, and vCard 2.1 export.
-- **Consequence:** third parties cannot create or read candidates, job orders, pipelines, or activities, except by scraping the HTML UI with a logged-in session.
-- **Nascent domain layer:** `src/OpenCATS/Entity/{Company,JobOrder}{,Repository}.php` is a small PSR-4 layer with repository classes. It could serve as the service layer for a future API (see §7).
+### R3. E-mail triggers (all synchronous, in-request)
 
----
-
-## 5. Integrations
-
-### 5.1 Evaluation matrix
-| Integration | Direction / protocol | Format | Authentication | Error handling | Versioning | Rate limit | Docs | Tests | Status |
-|---|---|---|---|---|---|---|---|---|---|
-| E-mail (PHPMailer 6) | Out: SMTP (`tls` on 587 by default), sendmail, or PHP `mail()` (`config.php:208-225`, `lib/Mailer.php:314-351`) | HTML plus text alternative, UTF-8 | SMTP user and password in `config.php:221-223` | Exceptions enabled but never caught (API-011); successful sends logged to `email_history` (`lib/Mailer.php:363-391`) | composer `phpmailer/phpmailer ^6.5.0` | none | comments in `config.php` | none | Works, but fragile |
-| LDAP | Out: `ldap://` on port 389, protocol v3, no StartTLS (`lib/LDAP.php:40-51`, `config.php:266-284`) | LDAP | Service bind DN/password, then user bind | `error_log` only | n/a | none | `config.php` comments | none | Optional (`AUTH_MODE='sql'` by default, `config.php:48`) |
-| Resfly résumé parsing | Out: SOAP 1.1 over **HTTP** (`wsdl/parse.wsdl:78`) | SOAP RPC | `LICENSE_KEY` sent in the body (`lib/ParseUtility.php:92`; the key is hard-coded at `config.php:31`) | SoapFault swallowed, returns false (`:94-97`) | none | none | none | none | **Dead**: DNS lookup for `soap.resfly.com` fails (observed). Not gated (API-010) |
-| Sphinx full-text search | Out: Sphinx binary protocol to `localhost:3312` (`config.php:97-101`) | Binary | none | Retries 5 times with a 1 s sleep (`lib/Search.php:1890-1900`) | Client command version `0x107` from 2007 (`lib/sphinx/sphinxapi.php:26`) | n/a | `optional-updates/latest-sphinx-search/README.MD` (links to the wiki) | none | Off by default (`ENABLE_SPHINX=false`) |
-| ZIP → city/state | Out: HTTP GET to `http://maps.googleapis.com/maps/api/geocode/xml?sensor=false&address=` (`lib/ZipLookup.php:23`) | XML | **No API key** | Raw `simplexml_load_file`; undefined-variable notices on failure (`:55-60`) | none | none | none | Empty stub `ZipLookupTest` | **Non-functional**: Google returns `REQUEST_DENIED` (observed) |
-| ZIP radius search | Local `zipcodes` table (`db/upgrade-zipcodes.sql`, 42,847 lines) | SQL | n/a | n/a | n/a | n/a | installer option | none | Optional (`US_ZIPS_ENABLED`, `config.php:262`) |
-| New-version check and telemetry | Out: raw socket HTTP **GET** to `www.catsone.com:80/catsnewversion.php`, sending version, UID, PHP version, server software, user agent, **site name, active-user count, license key** (`lib/NewVersionCheck.php:106-123`, `:198-224`) | Custom `{<…>}` text | none | 5 s timeouts | none | once per day | none | none | Disabled by default (`system.disable_version_check=1`, `db/cats_schema.sql:1044`; `modules/install/Schema.php:44`). The response HTML is rendered in the UI (`TemplateUtility.php:176-180`) |
-| vCard | Out: download | vCard **2.1** (`lib/VCard.php:54`) | session plus ACL | n/a | 2.1 only | n/a | none | `VCardTest.php` (unit) | Works |
-| CSV export | Out: download | CSV with `"` escaping only (`lib/Export.php:161`, `lib/DataGrid.php:1451`); optional BOM (`DataGrid.php:1465-1480`) | session, **no ACL** | n/a | none | none | none | none | Works (API-020) |
-| CSV/TSV import | In: upload through the UI | `fgetcsv` with `,` or `\t` (`modules/import/ImportUI.php:620-624`, `:699-703`); candidates, companies, contacts (`lib/*Import.php`) | session, `import.import ≥ EDIT` (`:742`) | Per-import revert (`ImportUI.php:69`) | none | none | in-app help | none | Works |
-| Bulk résumé import | In: files dropped into `./upload/` on the server (`ImportUI.php:1300-1327`), then `import:processMassImportItem` | DOC, PDF, RTF, HTML, DOCX, ODT, TXT | session, `import.bulkResumes ≥ SA` (`:2027`) | per-file counts | none | 50 files per call | in-app help | none | Works; ODT extraction broken (5.2) |
-| Document-to-text | Local `exec` of antiword, pdftotext, html2text (or unrtf) at paths from `config.php:62-81`, arguments escaped (`lib/DocumentToText.php:101-146`); on Windows through `WScript.Shell` COM (`:352-373`) | text | n/a | return code | none | none | `config.php` comments | none | Depends on the host; **ODT bug** (5.2) |
-| Calendar | Internal only; reminder e-mails through the queue | Custom JS string (`Calendar::makeEventString`) | session | n/a | n/a | n/a | none | none | **No iCal, CalDAV, or Outlook/Google sync** (grep for `VCALENDAR` or `text/calendar` finds nothing) |
-| Google Maps | Out: link only, `http://maps.google.com/maps?q=` on the company page | URL | none | n/a | n/a | n/a | n/a | n/a | Works (plain link) |
-| Job boards (Indeed, SimplyHired) | Out: **pull** feed that the job boards poll (`xml/?t=`) | Custom XML | none | none | none | none | none | none | Indeed format from 2007; SimplyHired target likely obsolete (ASSUMPTION) |
-| LinkedIn, Monster, Dice, HRIS | none, apart from toolbar scraping of Monster pages (`ToolbarUI.php:186`) | – | – | – | – | – | – | – | **Absent** |
-| Careers portal embedding | Link to `careers/`, or iframe it yourself; there is no widget or JS SDK. `careerportal.js` is for settings and `careersPage.js` for button rollovers (`js/careersPage.js:1-40`) | HTML | none | – | – | – | – | – | No embed API. No `X-Frame-Options` anywhere (grep) |
-| Webhooks | none | – | – | – | – | – | – | – | **Absent** |
-| Hooks (internal extension API) | In-process `eval` | PHP source strings | – | – | – | – | none | none | 232 hook names across 278 call sites; only `SettingsUI::defineHooks()` implements any (3) (API-017) |
-| Async queue | Cron → `php QueueCLI.php` | DB table `queue` | none | `queue.error` flag; cleanup job | none | – | Header comment only (`QueueCLI.php:27-29`) | none | Needs cron (API-018) |
-| Sphinx maintenance scripts | `scripts/sphinx_{reindex,rotate,update_delta,restart}.sh`; hard-coded `/usr/local/www/catsone.com/...` defaults | shell | – | – | – | – | – | – | For the vendor's hosted environment (ASSUMPTION) |
-
-### 5.2 Integration details (FACT unless labelled otherwise)
-
-**E-mail: triggering events.** Every direct `Mailer` call site found by `grep "new Mailer|sendToOne|->send(|sendEmail("`:
-
-| Event | Code path | Subject / template |
+| Event | Code path | Runtime |
 |---|---|---|
-| Candidate, contact, company, or job-order ownership change | `lib/Candidates.php:341-351`, `lib/Contacts.php:279-290`, `lib/Companies.php:192-200`, `lib/JobOrders.php:250-258` | `'CATS Notification: … Ownership Change'`; templates `EMAIL_TEMPLATE_OWNERSHIPASSIGN{CANDIDATE,CONTACT,CLIENT,JOBORDER}` (`CandidatesUI.php:1128`, `ContactsUI.php:629`, `CompaniesUI.php:635`, `JobOrdersUI.php:840`) |
-| Pipeline status change, e-mail to the candidate | `lib/Pipelines.php:367-377` | `CANDIDATE_STATUSCHANGE_SUBJECT` (`config.php:166`); `EMAIL_TEMPLATE_STATUSCHANGE` (`CandidatesUI.php:1704`, `JobOrdersUI.php:1472`). Per-status opt-in is stored as a PHP-`serialize`d setting (`lib/Mailer.php` MailerSettings; `SettingsUI.php:2010`) |
-| Careers application: confirmation to the applicant, notification to owner and recruiter | `lib/CareerPortal.php:452-470` via `CareersUI.php:1518`, `:1585`, `:1595` | `EMAIL_TEMPLATE_CANDIDATEAPPLY`, `EMAIL_TEMPLATE_CANDIDATEPORTALNEW` |
-| Calendar event reminders | `modules/calendar/tasks/Reminders.php:93` → `lib/Calendar.php:945-966` | `'CATS Event Reminder: '` plus `$GLOBALS['eventReminderEmail']` (`config.php:228-242`) |
-| Mass e-mail to candidates | `modules/candidates/CandidatesUI.php:3305-3370` | user-written |
-| Test e-mail | `ajax/testEmailSettings.php:88` | `'CATS Test E-Mail'` |
-| Forgot password | `modules/login/LoginUI.php:448-461` | Calls `Users::getPassword()` and uses `PASSWORD_RESET_SUBJECT`/`_BODY`. **None of these are defined anywhere** (grep), so the flow cannot work (API-011) |
+| Ownership change of candidate / contact / company / job order | `lib/Candidates.php:341-351`, `lib/Contacts.php:279-290`, `lib/Companies.php:192-200`, `lib/JobOrders.php:250-258` | Not triggered |
+| Pipeline status change (optional e-mail to candidate) | `lib/Pipelines.php:367-377` | #31 with e-mail unchecked: works |
+| Careers application (applicant confirmation; owner/recruiter notice) | `lib/CareerPortal.php:452-470` via `CareersUI.php:1518`, `:1585`, `:1595` | Fatal after save (RT-04, #85, #86) |
+| Calendar reminders | `modules/calendar/tasks/Reminders.php:93` → `lib/Calendar.php:945-966` | Needs scheduler; not run |
+| Mass e-mail to candidates | `modules/candidates/CandidatesUI.php:3305-3370` | Fatal (RT-04, #79) |
+| Test e-mail | `ajax/testEmailSettings.php:86-93` | Fatal text in AJAX box (RT-04, #77) |
+| Forgot password | `modules/login/LoginUI.php:448-461` | Fatal before sending (RT-03, #04) |
 
-Template placeholders are `%DATETIME% %SITENAME% %USERFULLNAME% %USERMAIL%` (`lib/EmailTemplates.php`, `replaceVariables`), plus careers-specific `%CAND*%` and `%JBOD*%` placeholders (`CareersUI.php:1489-1512`).
+Placeholders: `%DATETIME% %SITENAME% %USERFULLNAME% %USERMAIL%` (`lib/EmailTemplates.php`) plus careers `%CAND*%`/`%JBOD*%` (`CareersUI.php:1489-1512`). Successful sends are logged to `email_history` (`lib/Mailer.php:363-391`).
 
-**LDAP (`lib/LDAP.php`).**
-- Enabled when `AUTH_MODE` is `ldap` or `sql+ldap` (`lib/Users.php:35`, `:823-835`).
-- The filter is built as `LDAP_ATTRIBUTE_UID . '=' . $username` with no `ldap_escape` (`lib/LDAP.php:68`, `:111-112`, `:130`).
-- The connection uses plain `ldap_connect(LDAP_HOST, LDAP_PORT)` with no `ldap_start_tls` (`:40-51`).
-- The shipped defaults point at the public test server `ldap.forumsys.com` (`config.php:266`).
-- Unknown LDAP users are auto-provisioned as disabled accounts (`lib/Users.php:846-850`).
-- Empty passwords are rejected before bind (`lib/Users.php:792-795`), which prevents anonymous-bind bypass.
+### R4. Careers portal page map
 
-**Resfly (`lib/ParseUtility.php`, `lib/License.php:687-730`).** See API-010.
-- Call sites: careers `resumeParse` (`CareersUI.php:524-528`); add-candidate `parseDocument` (`CandidatesUI.php:1005-1008`); mass import (`ImportUI.php:1373-1416`). UI toggles also depend on it (`MassImportStep*.tpl`, `candidates/Add.tpl`).
-- ASSUMPTION (external knowledge, backed by the failed DNS lookup): Resfly was Cognizo/CATS's hosted parsing service and was shut down years ago.
-
-**Sphinx.** The client is `lib/sphinx/sphinxapi.php` (2007, `$Id … 2394 2007-04-27`), used only by `lib/Search.php:1866-1900` for résumé keyword search and filtered by `site_id`.
-- ASSUMPTION: current Sphinx 3.x or Manticore may still accept command version `0x107`, but this is untested. `optional-updates/latest-sphinx-search/` ships a newer `Search.php` and `sphinx.conf`.
-
-**DocumentToText bug.** In the ODT branch, `convert($fileName, …)` calls `$this->odt2text($filename)`, a lower-case variable that is undefined (`lib/DocumentToText.php:72` vs `:166`). ODT text extraction therefore always fails. This affects résumé indexing, careers uploads, and mass import.
-
-**Queue and cron.**
-- `QueueCLI.php` calls `ModuleUtility::registerModuleTasks()`, which includes every `modules/*/tasks/tasks.php` (`lib/ModuleUtility.php:86-101`).
-- Registered recurring tasks:
-  - `CleanExceptions`: daily at 03:xx, deletes `exceptions` rows older than `EXCEPTIONS_TTL_DAYS` (`modules/queue/tasks/tasks.php:39`, `CleanExceptions.php:53`, `:56-76`);
-  - `Reminders`: every minute (`modules/calendar/tasks/tasks.php:39`, `Reminders.php:47`).
-- One-off tasks can be queued through `QueueProcessor::addAsynchronousTask()` (`lib/QueueProcessor.php:278`), but no production code calls it (only `SampleTask.php:43` does).
-- `modules/queue/tasks.php:41` registers `'CleanExceptions'` without a path and is never included (dead duplicate).
-- `SystemUtility::isSchedulerEnabled()` reports the scheduler as live only if `queue.time` is less than 5 minutes old (`lib/QueueProcessor.php:493-523`). The UI offers event reminders only in that case (`CandidatesUI.php:1747`, `ContactsUI.php:1110`, `JobOrdersUI.php:1508`).
-- The cron line `* * * * * php /path/QueueCLI.php` is **not documented** in README or elsewhere (grep for `cron` finds only `CHANGELOG.MD:510` and code comments).
+| `p=` / sub-action | Method | Purpose | Evidence | Runtime |
+|---|---|---|---|---|
+| (none) | GET | Home / registered-candidate login block | `CareersUI.php:856-935` | #80 |
+| `showAll` | GET | Job list (honours `allowBrowse`) | `:151-179` | #81 |
+| `showJob&ID=` | GET | Job detail (checks `public`) | `:793-855` | #82 |
+| `search`, `searchResults` | GET | Empty branches; template only | `:180-182`, `:856-858` | #83 (page renders) |
+| `candidateRegistration&ID=` | GET | "Applied before?" gate (registration only) | `:359-411` | Not tested |
+| `applyToJob&ID=` (+ `resumeLoad`, `resumeParse`, `processLogin`) | GET/POST | Application form; stage or parse a résumé | `:412-714` (`resumeParse` `:521-541`) | #84; `resumeLoad` used in #86 |
+| `onApplyToJobOrder` | POST multipart | Create/update candidate, attachment, pipeline, activity, questionnaire, e-mails | `:715-792`, `:1190-1600` | #85, #86 (saved; then RT-04) |
+| `registeredCandidateProfile`, `onRegisteredCandidateProfile` | GET/POST | Profile view/update, résumé replace | `:183-358` | Not tested |
+| `pa=logout` | POST | Clear portal cookie | `:134-141` | Not tested |
+| `?templateName=` | GET | Any visitor can switch templates | `:106-108` | Not tested |
 
 ---
 
-## 6. Detailed findings
+## Area-level unknowns
 
-### API-001: No REST/JSON API. The only machine interface is a session-bound XML/HTML RPC
-- **Severity:** HIGH
-- **Finding:** There is no documented, versioned, or authenticated-by-credential interface for any domain object: candidates, companies, contacts, job orders, pipelines (`candidate_joborder`), activities, attachments, saved lists, calendar events, or users. `ajax.php` is a private UI RPC. It returns XML or HTML fragments, uses the browser session, and has no ACL layer. The only server-to-server outputs are the RSS/XML job feeds.
-- **Evidence:** §4 grep results. `lib/AJAXInterface.php:196-261` (session-only authentication). `ajax.php:77-92` (RPC routing by `f`). The table in §2.4 shows 6 handlers returning HTML fragments, for example `ajax/getPipelineJobOrder.php:184-330` and `ajax/getDataGridPager.php:60-61`.
-- **Impact:** No integrations with HRIS, job boards, calendars, e-mail, or BI are possible without HTML scraping. Automation and mobile clients are blocked. Any change to the UI breaks the "API" because the two are the same thing.
-- **Recommendation:** Build `/api/v1` as described in §7, on top of the existing `lib/*` business classes (`Candidates`, `JobOrders`, `Pipelines`, `ActivityEntries`, `Attachments`, `SavedLists`, `Calendar`) or the `src/OpenCATS/Entity/*Repository` layer. Do not reuse `ajax.php`.
+1. **Third-party consumers.** Whether external scripts call `ajax.php` or the feeds today; any such consumer depends on an undocumented contract. Validate with access logs from real installations.
+2. **Deployed web-server rules and PHP flags.** Whether `QueueCLI.php`, `rebuild_old_docs.php`, `scripts/`, `modules/*/ajax/*.php`, `attachments/` and `upload/` are blocked, and the effective `session.cookie_*`, `display_errors` and `register_argc_argv` settings. Validate by reviewing deployment configurations; the repo ships none for nginx.
+3. **Security behaviour of the RPC and portal.** API-002/004/005/006/007/008 are code findings only. Validate with authorized security testing on an isolated instance (no such testing was done or allowed here).
+4. **Role behaviour.** Outcomes for READ/EDIT/sourcer/careerportal users across the RPC (baseline used only `admin`). Validate with authorized role-based testing.
+5. **Mail with a working relay.** Behaviour when SMTP is reachable but rejects recipients or times out. Validate with a real SMTP relay in a test environment.
+6. **Job-board ingestion.** Whether current Indeed or other boards accept the XML output. Validate with the boards' current feed validators.
+7. **External hosts.** Ownership of `resfly.com` and the status of `www.catsone.com/catsnewversion.php`. Validate with registry lookups, without sending application data.
+8. **Candidate registration in the field.** How many installations enable registration or custom portal templates (affects API-004 reach). Validate with field data.
+9. **INSTALL_BLOCK reliability.** Whether the lock file reliably exists after installation and upgrades (if missing, the installer RPC is open). Validate on real installations.
 
-### API-002: Careers "apply" trusts a client-supplied `candidateID`, allowing unauthenticated overwrite of any candidate
-- **Severity:** CRITICAL
-- **Finding:**
-  - The public application form round-trips `candidateID` in a hidden field (`CareersUI.php:699`, `:710`).
-  - On submit, the value is read directly from POST: `$candidateID = isset($_POST['candidateID']) ? intval($_POST['candidateID']) : -1;` (`:725`). It is passed to `onApplyToJobOrder($siteID, $candidateID)` (`:750`).
-  - Inside, `if ($candidateID !== false)` runs `$candidates->update($candidateID, …)` with the attacker's name, e-mail, phones, address, key skills, source, and EEO fields, and sets the owner to the automated user (`:1279-1293`).
-  - It then attaches the uploaded file, adds the candidate to the pipeline, and writes an activity (`:1349-1470`).
-  - There is no check that the submitter is that candidate, and this path does not depend on `candidateRegistration` being enabled.
-- **Evidence:** `modules/careers/CareersUI.php:725`, `:750`, `:1190`, `:1279-1293`. `lib/Candidates.php:249-254` (update signature; scoped only by `site_id`).
-- **Impact:** Anyone on the internet can take a public job ID and iterate `candidateID=1..N`. Each request overwrites the PII of existing candidates, reassigns their ownership, and plants résumés. This destroys data integrity and is a GDPR-relevant integrity breach. It needs only an enabled portal and one public job order.
-- **Recommendation:** Never accept a candidate identity from the client. Remove `candidateID` from `CareersUI.php:699`/`:710` and `:725`. Derive the identity only from a server-side verified session, set after e-mail verification (a magic link). Until a redesign, always create a new candidate or a `candidate_duplicates` link (the table exists) rather than updating an existing record. Add a Behat scenario that posts a foreign `candidateID` and checks that no update happens.
+## Changes from the Phase 0 edition
 
-### API-003: The careers returning-candidate update passes misaligned arguments to `Candidates::update()`
-- **Severity:** HIGH
-- **Finding:** The signature is `update($candidateID, $isActive, $firstName, $middleName, $lastName, $email1, $email2, $phoneHome, $phoneCell, $phoneWork, $address, $city, $state, $zip, $source, $keySkills, $dateAvailable, $currentEmployer, $canRelocate, $currentPay, $desiredPay, $notes, $webSite, $bestTimeToCall, $owner, $isHot, $email, $emailAddress, $gender, $race, $veteran, $disability)` (`lib/Candidates.php:249-254`). `CareersUI.php:1284-1290` passes `…, $candidate['notes'], '', $bestTimeToCall, $automatedUser['userID'], $automatedUser['userID'], $gender, $race, $veteran, $disability`. As a result:
-  - `isHot` receives a user ID (truthy), so the candidate is flagged hot;
-  - the e-mail body (`$email`) receives the gender value;
-  - `$emailAddress` receives the race value;
-  - `gender` and `race` receive the veteran and disability values, and `veteran` and `disability` fall back to `''`.
-  - Because `$emailAddress` is not empty, `Candidates::update` sends "CATS Notification: Candidate Ownership Change" to the address `<race value>` (`lib/Candidates.php:341-351`).
-- The registered-profile path (`CareersUI.php:298-332`) passes `$email1, $email1` in the `$email`/`$emailAddress` slots. Every profile update therefore mails the candidate an "Ownership Change" notice whose body is their own address.
-- **Evidence:** as cited. INFERENCE: with `new PHPMailer(true)` (`lib/Mailer.php:76`), `AddAddress('<race id>')` throws an uncaught exception, so the applicant sees a fatal error after the database was already modified.
-- **Impact:** EEO compliance data is silently corrupted, owner and hot flags are wrong, spurious mail is sent, and applications fail part-way.
-- **Recommendation:** Replace positional calls with a DTO or named array, or with PHP 8 named arguments. At minimum, fix `CareersUI.php:1284-1290` and `:298-332` to pass `''` for `$email`/`$emailAddress` and the EEO values in their correct positions. Add a unit test that asserts the SQL column mapping.
-
-### API-004: Careers "registered candidate" login is a forgeable knowledge-based cookie that can edit profiles and delete arbitrary attachments
-- **Severity:** HIGH
-- **Finding:**
-  - The portal identifies a returning candidate by matching the `<input-*>` fields of the registration template against `candidate` columns. For the default `CATS 2.0` template those are `email`, `lastName`, and `zip` (`db/cats_schema.sql:440`). The values come from POST, or from a client-side cookie `cats<siteID>cw` in the format `"field"="value"` (`CareersUI.php:1635-1735`, `:1737-1763`).
-  - No secret is involved. Anyone who knows a candidate's e-mail, last name, and ZIP can forge the cookie.
-  - `onRegisteredCandidateProfile` then updates the profile (`:259-332`) and deletes `$_GET['attachmentID']` (`:291`, `:340`). `Attachments::delete()` scopes only by `site_id`, not by candidate (`lib/Attachments.php:304-335`). The "candidate" can therefore delete **any** attachment on the site, including other candidates' résumés, company documents, and `catsbackup` records.
-- **Evidence:** as cited. The feature is off by default (`candidateRegistration => '0'`, `lib/CareerPortal.php:79`).
-- **Impact:** Account takeover of candidate profiles, and unauthenticated deletion of any file once registration is enabled.
-- **Recommendation:** Replace the scheme with e-mail magic-link verification and a server-side session. Scope attachment replacement to `data_item_type=100 AND data_item_id=<verified candidate>`. Never accept `attachmentID` from the client.
-
-### API-005: State-changing endpoints have no access-level checks
-- **Severity:** HIGH
-- **Finding:** `SecureAJAXInterface` only checks that the user is logged in (`lib/AJAXInterface.php:210-216`). The following handlers mutate data without checking any ACL:
-
-| Endpoint | Operation | Evidence |
-|---|---|---|
-| `deleteActivity` | Delete | `ajax/deleteActivity.php:33-47` |
-| `editActivity` | Update | `ajax/editActivity.php:113` |
-| `lists:deleteList`, `lists:newList`, `lists:editListName`, `lists:addToLists` | Create, rename, delete, add items | `modules/lists/ajax/*.php` |
-| `testEmailSettings` | Send mail with an arbitrary `From` | `ajax/testEmailSettings.php:86-93` |
-| `setColumnWidth` | Persistent preference write | `ajax/setColumnWidth.php:46` |
-| `import:processMassImportItem` | Create attachments | `modules/import/ajax/processMassImportItem.php:62-65` |
-
-  In the page UI, the same operations are gated. For example, the delete-activity link is shown only when `contacts.deleteActivity ≥ EDIT` (`modules/contacts/Show.tpl:287`) or `candidates.delete ≥ DELETE` (`modules/candidates/Show.tpl:611`). `m=settings&a=ajax_tags_add/del/upd` likewise has no ACL (`SettingsUI.php:675-700`, `:130-192`), while the `tags` page requires SA (`:234`).
-- **Evidence:** `lib/AJAXInterface.php:210-216`; `ajax/deleteActivity.php:33-47`; `ajax/editActivity.php:36`, `:113`; `modules/lists/ajax/deleteList.php:36-51`; `ajax/testEmailSettings.php:33`, `:86-93`; `modules/settings/SettingsUI.php:130-192` vs `:234`; UI gating at `modules/contacts/Show.tpl:287` and `modules/candidates/Show.tpl:611`.
-- **Impact:** A READ-only or "sourcer" user can delete activity history, lists, and tags, and can send mail as anyone through the configured SMTP relay. The ACL model is enforced only in the presentation layer.
-- **Recommendation:** Add a declarative `requireAccess('<secobj>', ACCESS_LEVEL_*)` to `SecureAJAXInterface`, mirroring `UserInterface::getUserAccessLevel()`. Map each handler to the secured object its page counterpart uses (e.g. `deleteActivity` → `activity.delete` at DELETE). In the future API, turn these mappings into scopes (§7).
-
-### API-006: No CSRF protection; GET accepted for mutations; no SameSite session cookie
-- **Severity:** HIGH
-- **Finding:**
-  - A grep for `csrf|xsrf|nonce|form_token` over PHP, JS, and templates returns nothing.
-  - `ajax.php` dispatches on `$_REQUEST` (`:63`, `:77`), and handlers read `$_REQUEST`. `GET ajax.php?f=deleteActivity&activityID=123` therefore works from an `<img>` tag on another site.
-  - The PHP session cookie `CATS` (`config.php:151`) is created by `session_start()` with default parameters. A grep for `session_set_cookie_params` finds nothing.
-  - `lib/Session.php:893-902` defines `$samesite = 'Strict'` but never uses it, and sets a different cookie, `session_cookie`, with `setcookie(...)` without an options array.
-- **Evidence:** `ajax.php:63`, `:77`; `grep -rni "csrf|xsrf|nonce|form_token"` returns nothing; `lib/Session.php:893-902` (`$samesite` defined, never passed to `setcookie`); `config.php:151`; `js/lib.js:332-335`.
-- **Impact:** Any page a logged-in recruiter visits can delete data or send mail through the endpoints in API-005. The same applies to all `index.php` POST forms, which are outside this document's scope.
-- **Recommendation:** Require POST for all state-changing `ajax.php` calls. Add a per-session CSRF token that `AJAX_callCATSFunction` sends (`js/lib.js:397-418`) and `SecureAJAXInterface` verifies. Call `session_set_cookie_params(['samesite'=>'Lax','httponly'=>true,'secure'=>SSL_ENABLED])` before every `session_start()` (`index.php:75`, `lib/AJAXInterface.php:207`, `QueueCLI.php:56`). Stop printing `session_id()` into pages (`getCookie()` usages).
-
-### API-007: `getDataGridPager` / `DataGrid::get()` allows path-traversal include and arbitrary class instantiation
-- **Severity:** HIGH (authenticated)
-- **Finding:** `ajax/getDataGridPager.php:43-58` passes `$_REQUEST['i']` to `DataGrid::get()`. That method splits the value on `:` and "sanitises" each part with `preg_replace("[^A-Za-z0-9]", "", …)` (`lib/DataGrid.php:267-268`). Without delimiters PHP treats `[`…`]` as the delimiters, so the pattern `^A-Za-z0-9` only strips that literal prefix. The call to `preg_replace("[^A-Za-z0-9]", "", "../../tmp/x")` returned `"../../tmp/x"` when executed. The result reaches `include_once(sprintf('modules/%s/dataGrids.php', $module))` (`:275-280`) and `new $class($siteID, $parameters, $misc)` (`:282`). The same code backs `m=export&a=exportByDataGrid` (`modules/export/ExportUI.php:135-140`, `DataGrid::getFromRequest` `:295-303`).
-- **Evidence:** `ajax/getDataGridPager.php:43-58`; `lib/DataGrid.php:267-268` (`preg_replace("[^A-Za-z0-9]", "", …)`), `:275-282`, `:295-303`; `modules/export/ExportUI.php:135-140`; PHP 8.4 execution returned `"../../tmp/x"` unchanged.
-- **Impact:** Any logged-in user can include any file named `dataGrids.php` reachable by a relative path, and can instantiate any declared class with attacker-shaped constructor arguments. Whether this becomes remote code execution depends on being able to plant a file with that name, which is UNKNOWN.
-- **Recommendation:** Fix the regex to `'/[^A-Za-z0-9]/'`. Better, keep a whitelist map of datagrid identifiers to classes, and check `is_subclass_of($class, 'DataGrid')` before instantiating.
-
-### API-008: Unauthenticated maintenance and operations endpoints
-- **Severity:** MEDIUM
-- **Finding:**
-  - `ajax.php?f=install:maint` has no authentication. It deletes `modules.cache` and runs `index.php` in maintenance mode, which executes pending module-schema SQL and `PHP:` blocks one step at a time (`modules/install/ajax/maint.php:30-37`; `lib/ModuleUtility.php:517-546`).
-  - `install:attachmentsReindex` checks authentication only when `INSTALL_BLOCK` exists (`modules/install/ajax/attachmentsReindex.php:32-35`, `:52`).
-  - `QueueCLI.php` has no SAPI guard (`:34-101`); a GET request runs queued tasks, including reminder e-mails, and prints module data.
-  - `rebuild_old_docs.php` reconverts every unindexed attachment and prints stored filenames with no authentication (`:14-65`).
-  - `install:ui` rewrites `config.php` from request data whenever `INSTALL_BLOCK` is absent (`modules/install/ajax/ui.php:55`, `:120`). This is by design, but it becomes remote code execution on any deployment where the file is missing (INFERENCE).
-- **Evidence:** `modules/install/ajax/maint.php:30-37`; `lib/ModuleUtility.php:517-546`; `modules/install/ajax/attachmentsReindex.php:32-35`, `:52`, `:95`; `QueueCLI.php:27-29`, `:34-101`; `rebuild_old_docs.php:14-65`; `modules/install/ajax/ui.php:55`, `:120`.
-- **Impact:** Anonymous users can trigger schema migrations and CPU-heavy conversion jobs, disclose internal filenames, and fire the task queue.
-- **Recommendation:** Add a `PHP_SAPI !== 'cli'` guard to `QueueCLI.php`, `rebuild_old_docs.php`, and `scripts/*.php`, or move them out of the web root. Require a ROOT session for `install:maint` and `install:attachmentsReindex` once `INSTALL_BLOCK` exists. Ship web-server rules (Apache and nginx) that deny `/scripts/`, `/QueueCLI.php`, `/rebuild_old_docs.php`, and `/modules/*/ajax/` direct hits.
-
-### API-009: Toolbar API: unauthenticated license disclosure, credentials in the URL, broken actions, dead client
-- **Severity:** MEDIUM
-- **Finding:**
-  - `index.php?m=toolbar&a=getLicenseKey` prints `LICENSE_KEY` to anyone (`modules/toolbar/ToolbarUI.php:83-85`, `:282-285`). The module does not require authentication (`:46`), and the key is committed in `config.php:31`.
-  - Toolbar login takes `CATSUser` and `CATSPassword` from **GET** (`:95-103`), so credentials end up in access logs and proxies. It also allows login CSRF.
-  - `case 'attemptLogin'` calls a method that does not exist (`:59-61`).
-  - `install.tpl` exists, but no `install` action is handled.
-  - ASSUMPTION (external knowledge): the client is a legacy XUL Firefox extension, and those stopped working with Firefox 57 in 2017. `storeMonsterResumeText` (`:186-280`) scrapes Monster.com page markup from that era.
-- **Evidence:** `modules/toolbar/ToolbarUI.php:46`, `:59-61`, `:83-85`, `:95-103`, `:114`, `:282-285`; `config.php:31`.
-- **Impact:** Credential exposure and a dead attack surface.
-- **Recommendation:** Remove `modules/toolbar/` entirely, or at least `getLicenseKey`, GET-based login, and `attemptLogin`. If a browser capture tool is needed, rebuild it on the §7 API with OAuth2 PKCE.
-
-### API-010: Resfly SOAP parsing is dead yet effectively always "enabled"; plaintext PII transfer; crash without ext-soap
-- **Severity:** HIGH
-- **Finding:**
-  - `LicenseUtility::isParsingEnabled()` returns `true` on every branch. If SOAP is missing it returns `true`, if the status is `true` it returns `true`, if the quota is exhausted it returns `true`, and it finally returns `true` (`lib/License.php:687-706`).
-  - `PARSING_ENABLED=false` (`config.php:51`) only makes `getParsingStatus()` skip the status call (`:708-727`); it does not disable parsing.
-  - Callers then run `new ParseUtility()` and `documentParse()`, which does `new SoapClient('wsdl/parse.wsdl')` (`lib/ParseUtility.php:53`, `:60`, `:87`) and sends `LICENSE_KEY` plus the full résumé text over **plain HTTP** to `soap.resfly.com` (`wsdl/parse.wsdl:78`, `ParseUtility.php:92`).
-  - The public careers `resumeParse` sub-action reaches this path (`CareersUI.php:521-528`), as do add-candidate (`CandidatesUI.php:1005-1008`) and mass import (`ImportUI.php:1373-1416`).
-  - Observed: `soap.resfly.com` does not resolve.
-  - INFERENCE: with ext-soap loaded, the DNS failure raises a `SoapFault` that is caught (`ParseUtility.php:94-97`), and parsing silently returns false. Without ext-soap, `new SoapClient` is a fatal "Class not found", so careers résumé parse, add-candidate parse, and mass import all crash.
-- **Evidence:** `lib/License.php:687-706`, `:708-727`; `config.php:51`; `lib/ParseUtility.php:53`, `:60`, `:87-97`; `wsdl/parse.wsdl:78`; `modules/careers/CareersUI.php:521-528`; `modules/candidates/CandidatesUI.php:1005-1008`; `modules/import/ImportUI.php:1373-1416`; DNS probe of `soap.resfly.com` failed.
-- **Impact:** Broken features that the UI advertises as working (`MassImportStep3.tpl:9` shows "Parsed and Ready to Import"); an attempted leak of candidate PII and the license key over cleartext if the hostname is ever re-registered by a third party; crashes on hosts without SOAP.
-- **Recommendation:** Make `isParsingEnabled()` return `PARSING_ENABLED && CATSUtility::isSOAPEnabled()`, which fixes it immediately. Delete `wsdl/`, `lib/ParseUtility.php`, and `LICENSE_KEY` usage. Put a `ResumeParser` interface behind the §7 design, with pluggable adapters (a local heuristic parser, or a modern HTTPS/JSON vendor configured with a secret, never a committed key).
-
-### API-011: Mailer reliability defects and a non-existent forgot-password implementation
-- **Severity:** HIGH
-- **Finding:**
-  1. `new PHPMailer(true)` enables exceptions (`lib/Mailer.php:76`), but `send()` wraps `AddAddress`/`Send` (`:234`, `:241`) in no `try/catch`. Any SMTP failure or invalid address throws an uncaught exception. This happens mid-request after database writes, for example in `Pipelines::setStatus` (`lib/Pipelines.php:340-377`) and in careers apply. The `if (!Send())` failure path (`:241-247`) is unreachable in exception mode (INFERENCE from PHPMailer 6 semantics).
-  2. `MAILER_MODE_DISABLED` is a no-op `case` (`lib/Mailer.php:316-317`), so PHPMailer keeps its default `mail()` transport (INFERENCE from PHPMailer defaults). Only template-driven senders honour `MAIL_MAILER == 0` (`lib/EmailTemplates.php:352-356`). Calendar reminders (`Reminders.php:93`) and `testEmailSettings` still send.
-  3. `SetLanguage('en', './lib/phpmailer/language/')` points at a directory that does not exist (`:85`; `ls lib/phpmailer` fails).
-  4. `LoginUI::onForgotPassword()` calls `Users::getPassword()` and uses the constants `PASSWORD_RESET_SUBJECT`/`BODY` (`modules/login/LoginUI.php:455-461`). None of these is defined anywhere, so the flow cannot work. The design, e-mailing the stored password, would also be impossible with `md5` hashes (`lib/Users.php:840`).
-  5. `Mailer::__construct` reads `$_SESSION['CATS']->getUserID()` when `$userID == -1` (`:96`). This couples library code to the web session. The CLI queue works around it by passing `0` (`lib/Calendar.php:952`).
-- **Evidence:** `lib/Mailer.php:76`, `:85`, `:96`, `:234`, `:241-247`, `:316-317`; `lib/EmailTemplates.php:352-356`; `modules/calendar/tasks/Reminders.php:93`; `modules/login/LoginUI.php:455-461`; grep finds no `function getPassword` in `lib/Users.php` and no `PASSWORD_RESET_*` definition.
-- **Impact:** User actions fail with 500 errors after partial writes; mail is sent even when the admin disabled it; there is no password recovery.
-- **Recommendation:**
-  - Catch `PHPMailer\PHPMailer\Exception` in `Mailer::send()` and turn it into `_errorMessage`.
-  - Honour `MAIL_MAILER == 0` inside `Mailer::send()`.
-  - Move sending to the queue (`QueueProcessor::addAsynchronousTask`) with retry.
-  - Replace forgot-password with a time-limited, hashed reset token.
-  - Log failures to `email_history` with a status column.
-
-### API-012: Job syndication feeds are broken, leaky, and ignore portal settings
-- **Severity:** MEDIUM
-- **Finding:**
-  - (a) `rss/index.php` never includes `config.php` but uses `LEGACY_ROOT` (`rss/index.php:36-38`). Compare `careers/index.php:37` and `xml/index.php:37`, which do include it. The documented feed URL `/rss/`, linked from careers templates (`CareersUI.php:949`, `:953`), therefore fails fatally: PHP 8 throws `Undefined constant`, as reproduced; PHP 7.2 warns and then hits a fatal "Class CATSUtility not found" (INFERENCE).
-  - (b) RSS writes `title`, city, and state into XML unescaped (`modules/rss/RssUI.php:140-150`), so a job title containing `&` produces invalid XML.
-  - (c) Neither RSS nor XML checks the career portal's `enabled` flag, although careers does (`CareersUI.php:98-103`). RSS also ignores `allowBrowse` (`XmlUI.php:190` checks it). Public jobs are therefore syndicated even when the admin disabled the portal, which is off by default.
-  - (d) `hiringCompany` is hard-coded to `'CATS (www.catsone.com)'` (`XmlUI.php:255-261`), `jobCountry` to `"US"` (`:280-286`), and `jobZipCode` to `''` (`:288-294`). Job boards therefore receive the wrong employer name.
-  - (e) The `notes` tag exposes internal job-order notes if an admin adds it to a template (`XmlUI.php:304-310`).
-  - (f) `rss.xtpl` cannot be selected because `?t=` is matched only against database rows (`XmlUI.php:129-140`) and only `indeed` and `simplyhired` are seeded (`db/cats_schema.sql:1173-1174`).
-  - (g) Push submission is an unimplemented stub (`lib/XmlJobExport.php:108-111`).
-  - (h) Links are built from the client-controlled `Host` header (`lib/CATSUtility.php:233`), which allows cache poisoning of feed URLs.
-  - (i) The feeds are single-site only (`getFirstSiteID()`, `XmlUI.php:105-107`, `RssUI.php:101-103`).
-  - ASSUMPTION (external knowledge): SimplyHired's 2007-era XML intake (`post_url http://www.simplyhired.com/confirmation.php`) is obsolete, and Indeed's current XML feed specification requires fields this template lacks (e.g. `jobtype`, `salary`, `email`).
-- **Evidence:** `rss/index.php:36-38` vs `careers/index.php:37` and `xml/index.php:37`; `modules/rss/RssUI.php:99-156`; `modules/xml/XmlUI.php:105-120`, `:129-148`, `:190`, `:255-310`; `modules/careers/CareersUI.php:98-103`, `:949-953`; `lib/XmlJobExport.php:108-111`; `lib/CATSUtility.php:233`; `db/cats_schema.sql:1173-1174`.
-- **Impact:** Postings are missing or wrong on job boards, and feeds can leak data when the portal is "disabled".
-- **Recommendation:** Fix `rss/index.php` by adding `include_once('config.php')`. Route every value through a single XML-escaping helper and drop `htmlspecialchars` inside CDATA. Gate both feeds on `enabled`. Map the company from `joborder.company_id`, and country and zip from the job order. Replace the feed layer with a `/api/v1/public/jobs` resource (JSON) and schema.org `JobPosting` JSON-LD on `p=showJob` (which Google for Jobs consumes), and keep an Indeed XML adapter generated from the same model.
-
-### API-013: ZIP lookup is an unauthenticated outbound proxy to a keyless Google API that no longer answers
-- **Severity:** MEDIUM
-- **Finding:**
-  - `ajax.php?f=zipLookup` uses the unauthenticated `AJAXInterface` (`ajax/zipLookup.php:9`) and calls `simplexml_load_file('http://maps.googleapis.com/maps/api/geocode/xml?sensor=false&address=' . $zip)`. There is no URL-encoding and no API key (`lib/ZipLookup.php:23-26`).
-  - Observed: the endpoint returns `REQUEST_DENIED: You must use an API key`.
-  - On failure the code reads the undefined `$loc_level_*` variables (`:55-60`), so notices corrupt the XML response when `display_errors` is on.
-- **Evidence:** `ajax/zipLookup.php:9-38`; `lib/ZipLookup.php:23-26`, `:55-60`; observed `REQUEST_DENIED` response.
-- **Impact:** City/state autofill in the Add/Edit forms for candidates, companies, and contacts silently does nothing. Anonymous users can make the server issue outbound requests.
-- **Recommendation:** Require `SecureAJAXInterface`. Use the local `zipcodes` table first, since it is already shipped (`db/upgrade-zipcodes.sql`). Put any external geocoder behind a configurable adapter over HTTPS with a key from the environment.
-
-### API-014: No rate limiting or abuse controls on public endpoints
-- **Severity:** MEDIUM
-- **Finding:**
-  - A grep for `rate.?limit|throttl|brute|lockout|captcha` finds only an unused CAPTCHA image renderer (`lib/GraphGenerator.php:432-445`, reachable at `m=graphs&a=wordVerify`, `GraphsUI.php:591-610`). The careers apply flow never uses it.
-  - Careers `onApplyToJobOrder` creates candidates, attachments, pipelines, and activities, and sends e-mail to the **applicant-supplied** address (`CareersUI.php:1518-1523`). An attacker can therefore use it to send the confirmation template to arbitrary recipients.
-  - Public graphs render images of any size up to 2000×1200 (`GraphsUI.php:53-66`).
-  - Toolbar and login `processLogin` have no attempt throttling.
-- **Evidence:** `modules/careers/CareersUI.php:1190-1600` (no throttle or CAPTCHA), `:1518-1523`; `modules/graphs/GraphsUI.php:53-66`, `:78-99`; `lib/GraphGenerator.php:432-445` (unused CAPTCHA); `modules/toolbar/ToolbarUI.php:95-103`; empty greps for rate limiting.
-- **Impact:** Spam relay, database pollution, CPU exhaustion, and credential stuffing.
-- **Recommendation:** Add per-IP token buckets (APCu or database) around `careers onApplyToJobOrder`, `m=login`, `m=toolbar`, `m=graphs`, and `ajax.php`. Add a CAPTCHA or proof-of-work to apply. Send confirmation mail only after double opt-in. In the future API, return `429` with `Retry-After`.
-
-### API-015: Inconsistent and unsafe AJAX response contract
-- **Severity:** MEDIUM
-- **Finding:**
-  - Error responses come in three shapes: XML `errorcode`/`errormessage` (`lib/AJAXInterface.php:61-69`), bare text through `die()` (`ajax/editActivity.php:77`; `getCandidateIdBy{Email,Phone}.php:36`, where the phone handler says "Invalid E-Mail address."), and HTML.
-  - Values are interpolated into XML without escaping in `getCompanyContacts.php:64-66`, `getCompanyLocation.php:60-63`, `getCandidateIdByEmail.php:63`, `getParsedAddress.php:136-155`, and the error message itself (`AJAXInterface.php:66`). Other handlers use `htmlspecialchars` (`getDataItemJobOrders.php:95-97`) or `rawurlencode` (`getCompanyNames.php:81`).
-  - Error codes are magic numbers (`-1`, `-2`).
-  - There is no version, schema, or content negotiation.
-  - The client detects errors by sniffing for PHP's HTML error text (`js/lib.js:443-446`).
-  - The dispatcher strips leading whitespace from every line of every buffered response (`ajax.php:122`), which mangles `<pre>` and textarea content unless the caller sets `nospacefilter`.
-- **Evidence:** `lib/AJAXInterface.php:61-69`; `ajax/editActivity.php:77`; `ajax/getCandidateIdByPhone.php:36`; `ajax/getCompanyContacts.php:64-66`; `ajax/getParsedAddress.php:136-155`; `ajax.php:122`; `js/lib.js:443-446`.
-- **Impact:** Company or contact names containing `&` or `<` break the UI (XML parse errors) and allow XML/HTML injection into the DOM. Correct third-party consumption is impossible.
-- **Recommendation:** Freeze the legacy contract as-is for the UI, but centralise escaping in a helper (`AJAXInterface::xmlElement($name, $value)`), and use it in all 22 XML handlers. New endpoints should use JSON with RFC 9457 `application/problem+json` errors.
-
-### API-016: No API credentials or SSO; LDAP is the only external identity provider, and it is weak
-- **Severity:** MEDIUM
-- **Finding:**
-  - There are no API keys, personal access tokens, or OAuth2 clients, and no SAML or OIDC: greps for `oauth|saml|openid|bearer|api[_-]?key` are empty.
-  - Authentication modes are `sql`, `ldap`, and `sql+ldap` (`config.php:48`, `lib/Users.php:823-845`). Local passwords are unsalted `md5` (`lib/Users.php:840`).
-  - LDAP builds its search filter without `ldap_escape` (`lib/LDAP.php:68`, `:112`, `:130`) and connects without TLS (`:40-51`).
-- **Evidence:** `config.php:48`, `:264-284`; `lib/Users.php:823-845`, `:840`; `lib/LDAP.php:40-51`, `:68`, `:112`, `:130`; empty greps for `oauth|saml|openid|bearer|api[_-]?key`.
-- **Impact:** Integrations must share a human's password. There is no central identity, MFA, or de-provisioning. LDAP credentials cross the network in cleartext.
-- **Recommendation:**
-  - Add OIDC login (Authorization Code with PKCE) as a new `AUTH_MODE`, and map IdP groups to `ACCESS_LEVEL_*` and user categories.
-  - Add hashed, revocable personal access tokens and OAuth2 client-credentials for server-to-server use (§7).
-  - For LDAP, apply `ldap_escape($username, '', LDAP_ESCAPE_FILTER)`, add `ldap_start_tls()` or `ldaps://`, and move settings from `config.php` to environment variables.
-
-### API-017: No webhooks or outbound events; the extension API is `eval` of session-stored PHP
-- **Severity:** MEDIUM
-- **Finding:**
-  - There are no webhooks or outbound event notifications (grep for `webhook` is empty).
-  - The internal extension mechanism, `Hooks::get($name)`, returns concatenated PHP source strings taken from `$_SESSION['hooks']` for callers to `eval` (`lib/Hooks.php:52-72`).
-  - The session copy is filled from every module's `getHooks()` on module scan (`lib/ModuleUtility.php:275-298`).
-  - There are 232 distinct hook names across 278 call sites. Only `SettingsUI::defineHooks()` provides implementations, and there are 3 of them (`modules/settings/SettingsUI.php:87-117`).
-  - The same pattern appears in `ajax.php:118`/`:125-128` (`AJAX_HOOK`, `$filters`), in the wizard (`WizardUI.php:181`), and in queue task instantiation (`lib/QueueProcessor.php:210`).
-- **Evidence:** `lib/Hooks.php:52-72`; `lib/ModuleUtility.php:279`, `:296`; `modules/settings/SettingsUI.php:87-117`; `ajax.php:118`, `:125-128`; `modules/wizard/WizardUI.php:181`; `lib/QueueProcessor.php:210`.
-- **Impact:** Integrators cannot react to changes such as a new applicant or a status change without polling or forking the code. Anything that can write `$_SESSION` gains code execution. Hook names are an undocumented, unstable internal contract.
-- **Recommendation:** Keep the hook names as the event catalogue, but replace string-`eval` with callable listeners registered at bootstrap. Emit domain events at the points where e-mail is already sent and history is already recorded (`Pipelines::setStatus` `lib/Pipelines.php:340-366`, `Candidates::add/update`, `CareersUI::onApplyToJobOrder`, `ActivityEntries::add`). Deliver them through an outbox table plus signed webhooks (§7).
-
-### API-018: Async queue relies on undocumented cron; registration defects
-- **Severity:** LOW
-- **Finding:**
-  - Reminder e-mails and exception cleanup run only if something executes `QueueCLI.php` every minute. This is not documented beyond `QueueCLI.php:27-29`.
-  - `modules/queue/tasks.php:41` (`registerRecurringTask('CleanExceptions')`, without a path) is never loaded. The copy that actually runs is `modules/queue/tasks/tasks.php:39`.
-  - `registerRecurringTask` stores only the task **name** in `queue.task` (`lib/QueueProcessor.php:156`). If `startNextTask` later picks up a leftover row, it calls `getInstantiatedTask('Reminders')`, which cannot resolve a path (`:201-225`) (INFERENCE: such rows stay unprocessed until cleanup).
-  - `QueueCLI.php:118` duplicates `case TASKRET_SUCCESS` where `TASKRET_SUCCESS_NOLOG` was intended.
-- **Evidence:** `QueueCLI.php:27-29`, `:115-118`; `modules/queue/tasks.php:41`; `modules/queue/tasks/tasks.php:39`; `lib/ModuleUtility.php:86-101`; `lib/QueueProcessor.php:156`, `:201-225`, `:493-523`.
-- **Impact:** Silent loss of reminders on installs without cron. Background processing is unreliable.
-- **Recommendation:** Document the cron entry in README and the installer. Store the task path. Fix the duplicate case. Use the queue as the delivery engine for mail and webhooks (§7).
-
-### API-019: Every machine-facing entry point hits a fatal error on PHP ≥ 8.0
-- **Severity:** HIGH
-- **Finding:** `ajax.php:50` and `:56`, `index.php:93` and `:99`, and `QueueCLI.php:59` and `:65` call `get_magic_quotes_runtime()` and `get_magic_quotes_gpc()`. Both were removed in PHP 8.0; `function_exists` returns `false` on the PHP 8.4 CLI. There is no polyfill (grep). CI runs only PHP 7.2 (`.github/workflows/ci.yml` matrix `['7.2']`), and the Docker image is `opencats/php-base:7.2-fpm-alpine` (`docker/docker-compose.yml`). The legacy `.travis.yml` lists 8.0 and 8.2.
-- **Evidence:** `ajax.php:50`, `:56`; `index.php:93`, `:99`; `QueueCLI.php:59`, `:65`; `.github/workflows/ci.yml` (matrix `php-version: ['7.2']`); `docker/docker-compose.yml` (`opencats/php-base:7.2-fpm-alpine`).
-- **Impact:** On any PHP version still supported upstream (8.1+), AJAX, careers, RSS, XML, the toolbar, and the queue all fail. The API surface can only run on end-of-life PHP.
-- **Recommendation:** Delete these blocks, which are no-ops since PHP 5.4, along with `lib/Attachments.php:944`, `modules/import/ImportUI.php:495`, and `lib/InstallationTests.php:185`. Add PHP 8.2 and 8.3 to the CI matrix, with a smoke test that calls `ajax.php?f=getParsedAddress`.
-
-### API-020: Import/export gaps: candidate CSV export has no ACL and no formula-injection protection
-- **Severity:** MEDIUM
-- **Finding:**
-  - `ExportUI` makes no `getUserAccessLevel` call (grep). "All records mode" (`ids` empty) exports every candidate's name, phones, and e-mail (`modules/export/ExportUI.php:77-127`; `lib/Candidates.php:665-670`).
-  - Cells are quoted only for `"` (`lib/Export.php:161`, `lib/DataGrid.php:1451`). Values beginning with `= + - @` are not neutralised. Public applicants control those values through careers fields.
-  - Only candidates can be exported through `Export` (`lib/Export.php:132-139`). Other entities go through DataGrid.
-  - Import supports CSV/TSV only (`ImportUI.php:620-624`). There is no XLSX, no HR-XML/HR Open Standards, and no API.
-- **Evidence:** `modules/export/ExportUI.php:77-127` (no `getUserAccessLevel`); `lib/Export.php:132-139`, `:161`; `lib/DataGrid.php:1451`; `lib/Candidates.php:665-670`; `modules/import/ImportUI.php:620-624`.
-- **Impact:** Bulk PII exfiltration by any user, including READ-only accounts, and CSV-injection against the recruiters who open exports.
-- **Recommendation:** Gate export on a `candidates.export` secured object at ≥ EDIT or SA. Prefix risky leading characters with `'`. Offer exports as asynchronous API jobs (`POST /api/v1/exports`) that are audited in `history`.
-
-### API-021: Almost no automated coverage of interfaces
-- **Severity:** MEDIUM
-- **Finding:**
-  - CI runs PHPUnit unit and integration tests plus the Behat `default` and `security` suites (`test/runAllTests.sh`, `.github/workflows/ci.yml`).
-  - No Behat feature calls `ajax.php`, careers, RSS, XML, graphs, or the toolbar. A case-insensitive grep of `test/features` finds only commented-out `ajax_*` lines (`GET_POST_requestsSecurity.feature:1331-1370`).
-  - Unit coverage relevant to interfaces is limited to `AJAXInterfaceTest` (ID validators) and `VCardTest`.
-  - The in-app SimpleTest AJAX tests (`modules/tests/testcases/AJAXTests.php`) are not run in CI. `GetCompanyNamesTest`, `GetPipelineJobOrderTest`, `SetCandidateJobOrderRatingTest`, `TestEmailSettingsTest`, and `ZipLookupTest` are stubs that only log in or are empty (`:380-927`).
-- **Evidence:** `test/runAllTests.sh`; `.github/workflows/ci.yml`; `test/features/GET_POST_requestsSecurity.feature:1331-1370` (commented out); `modules/tests/testcases/AJAXTests.php:380-927`; `src/OpenCATS/Tests/UnitTests/AJAXInterfaceTest.php:13`, `:104`.
-- **Impact:** API-002, API-003, API-005, API-012, and API-019 went undetected. Nothing protects an API migration.
-- **Recommendation:** Add Behat/HTTP contract tests for all 32 handlers: auth, ACL, and response shape. Add careers apply scenarios, including a forged `candidateID`, and RSS/XML validity checks (parse with `simplexml`). Generate contract tests from the OpenAPI document once it exists.
-
-### API-022: The in-app test harness can be run by any logged-in user
-- **Severity:** MEDIUM
-- **Finding:** `m=tests` requires only login (`modules/tests/TestsUI.php:65`). `a=runSelectedTests` executes the SimpleTest web and AJAX suites against the running instance and its database (`:104-125`). There is no access-level check (grep). `modules/tests/ajax/getCandidateJobOrderID.php` is exposed through `ajax.php`.
-- **Evidence:** `modules/tests/TestsUI.php:65`, `:79-94`, `:104-125`; `modules/tests/ajax/getCandidateJobOrderID.php:33`.
-- **Impact:** Test code can create or modify production data, and production ships an unnecessary attack surface.
-- **Recommendation:** Exclude `modules/tests/` from release packages (`ci/package-code.sh`, and the zip in `ci.yml` `release`), or require ROOT.
-
----
-
-## 7. Recommendations: target API design
-
-### 7.1 Principles
-1. **Build a new, separate API.** Use REST with JSON as the primary style, described by an **OpenAPI 3.1** document in the repo, for example `docs/api/openapi.yaml`, from which contract tests are generated. Do not try to retrofit `ajax.php`. REST fits the CRUD-plus-workflow nature of an ATS and the existing ACL model. GraphQL could be added later as a read-only layer for reporting, but it is not recommended first because per-field ACL enforcement against `getAccessLevel(secobj)` is harder.
-2. **Share one service layer with the UI.** Extract services from `lib/*.php`, reusing `src/OpenCATS/Entity/*Repository`. Both the UI modules and `/api/v1` then call the same code, so ACL checks, history (`lib/History.php`), and e-mail triggers are identical.
-3. **Version in the path.** Use `/api/v1/...`. Mark deprecations with the `Deprecation` and `Sunset` headers.
-4. **Errors** use RFC 9457 `application/problem+json`. **Pagination** is cursor-based. **Filtering** reuses DataGrid filter semantics (`=~`, `==`, `=@` near ZIP, `lib/DataGrid.php:1226`).
-5. **Tenant scoping:** every token is bound to a single `site_id`, which replaces the `getFirstSiteID()`, `Attachments(-1)`, and `Site(-1)` shortcuts.
-
-### 7.2 Authentication and authorisation
-- **Machine credentials:**
-  - Personal access tokens: a new `api_token` table storing `site_id`, `user_id`, a `sha256` hash, scopes, `last_used_at`, and `expires_at`.
-  - OAuth2 client-credentials for server integrations, and Authorization Code with PKCE for browser or mobile clients.
-- **Human SSO:** OIDC (and optionally SAML via a bridge), mapping IdP groups to `ACCESS_LEVEL_{READ,EDIT,DELETE,SA,ROOT}` and user categories (`sourcer`, `careerportal`).
-- **Scopes** are derived from the existing secured-object names, so ACL remains the single source of truth:
-
-| Scope | ACL equivalent (evidence) |
-|---|---|
-| `candidates:read` / `candidates:write` / `candidates:delete` | `candidates.*` (`CandidatesUI.php:129`, `:279`) |
-| `pipelines:write` | `pipelines.addActivityChangeStatus`, `pipelines.editRating` (`JobOrdersUI.php:176`, `ajax/setCandidateJobOrderRating.php:35`) |
-| `activities:write` / `activities:delete` | `contacts.deleteActivity`, `candidates.delete` (`contacts/Show.tpl:287`) |
-| `lists:write` | none today; add `lists.*` |
-| `exports:run` | new `candidates.export` (API-020) |
-| `settings:admin` | `settings.*` at SA |
-
-- Every request is logged to `history` or an `api_audit` table. Rate limits apply per token and per IP, returning `429` with `Retry-After`.
-
-### 7.3 Resource model: domain objects and legacy endpoints to migrate
-| Resource (table) | Routes | Legacy endpoint(s) to preserve or migrate |
-|---|---|---|
-| `candidates` (`candidate`, `extra_field`, `candidate_tag`, `candidate_duplicates`) | `GET/POST /candidates`, `GET/PATCH/DELETE /candidates/{id}`, `GET /candidates?email=&phone=` | `getCandidateIdByEmail`, `getCandidateIdByPhone`, `m=export&a=export`, careers apply (API-002) |
-| `companies` (`company`, `company_department`) | `/companies`, `/companies/{id}/contacts`, `/companies/{id}/departments`, `GET /companies?name~=` | `getCompanyNames`, `getCompanyContacts`, `getCompanyLocation`, `getCompanyLocationAndDepartments` |
-| `contacts` (`contact`) | `/contacts`, `GET /contacts/{id}` with `Accept: text/vcard` (vCard 4.0) | `m=contacts&a=downloadVCard` (vCard 2.1) |
-| `job-orders` (`joborder`) | `/job-orders`, `GET /job-orders/{id}/pipeline?sort=&page=` | `getPipelineJobOrder` (return JSON, not HTML), `getDataItemJobOrders` |
-| `pipelines` (`candidate_joborder`, `candidate_joborder_status_history`) | `POST /job-orders/{id}/pipeline` (add candidate), `PATCH /pipelines/{id}` (`status`, `rating`), `GET /pipelines/{id}/history` | `setCandidateJobOrderRating`, `getPipelineDetails`, `tests:getCandidateJobOrderID` |
-| `activities` (`activity`) | `/activities`, `PATCH/DELETE /activities/{id}` | `editActivity`, `deleteActivity` |
-| `attachments` (`attachment`) | `POST /{entity}/{id}/attachments` (multipart), `GET /attachments/{id}/content` (signed, short-lived URL instead of `directoryNameHash`) | `getAttachmentLocal`, `m=attachments&a=getAttachment`, mass import |
-| `lists` (`saved_list`, `saved_list_entry`) | `/lists`, `POST /lists/{id}/entries` (bulk) | `lists:newList`, `lists:editListName`, `lists:deleteList`, `lists:addToLists` |
-| `calendar-events` (`calendar_event`) | `/calendar-events`, plus a per-user **iCalendar feed** `GET /calendar.ics?token=` for Outlook and Google subscription | `m=calendar&a=dynamicData` |
-| `email-templates` (`email_template`) | `GET /email-templates/{id}`, `POST /email-templates/{id}/render` | `showTemplate`, `replaceTemplateTags` |
-| `tags` (`tag`) | `/tags` | `m=settings&a=ajax_tags_*` |
-| `users` (`user`) | `/users` (SA only), `/me` | `ajax_wizardAddUser` / `DeleteUser` |
-| **Public** `jobs` (`joborder` with `public=1`) | `GET /public/v1/jobs`, `GET /public/v1/jobs/{id}`, `POST /public/v1/jobs/{id}/applications` (CAPTCHA, rate limit, e-mail verification) | `careers/?p=showAll|showJob|onApplyToJobOrder`, `rss/`, `xml/?t=` (keep as thin adapters over the same query) |
-| Utilities | `GET /geo/postal-codes/{zip}` (local `zipcodes` table first), `POST /parse/address`, `POST /parse/resume` (pluggable) | `zipLookup`, `getParsedAddress`, Resfly |
-| Async jobs (`queue`) | `POST /exports`, `POST /imports`, `GET /jobs/{id}` | `import:processMassImportItem`, `settings:backup`, CSV import |
-
-### 7.4 Event model and webhooks
-- **Event catalogue:** each event is emitted at a code point that already exists.
-
-| Event | Emission point |
-|---|---|
-| `candidate.created`, `candidate.updated`, `candidate.deleted` | `lib/Candidates.php` `add`/`update`/`delete` |
-| `application.submitted` | `CareersUI::onApplyToJobOrder` |
-| `pipeline.added`, `pipeline.status_changed`, `pipeline.rating_changed` | `lib/Pipelines.php` `add`, `setStatus` (`:294`), `updateRatingValue` |
-| `activity.created` | `ActivityEntries::add` |
-| `joborder.published` / `joborder.closed` | `JobOrders::update` when `public` or `status` changes |
-| `attachment.created` | `AttachmentCreator` via the `CREATE_ATTACHMENT_FINISHED` hook |
-| `calendar.reminder_due` | `Reminders` task |
-
-- **Delivery:** use a transactional outbox table (e.g. `event_outbox`). The existing `QueueProcessor` delivers events as HTTPS `POST`s with `X-OpenCATS-Signature: sha256=HMAC(secret, body)`, `X-OpenCATS-Event`, and `X-OpenCATS-Delivery` headers. Retries use exponential backoff and failures go to a dead-letter queue. Subscriptions live in a new `webhook_subscription` table (`site_id`, `url`, `events[]`, `secret_hash`, `active`).
-- **Migrating hooks:** the 232 names in §6/API-017 become in-process listener topics. The 3 real implementations in `SettingsUI::defineHooks()` become PHP callables. Session-stored `eval` strings are removed.
-
-### 7.5 Integration adapters (ports and adapters)
-| Port | Adapters |
-|---|---|
-| `MailTransport` | SMTP (current), sendmail, API-based providers; always queued; honours `MAIL_MAILER=0` (API-011) |
-| `ResumeParser` | none (default), a local heuristic built from `AddressParser`, an external HTTPS/JSON vendor. The Resfly SOAP adapter is deleted (API-010) |
-| `Geocoder` | local `zipcodes` table first, external provider configured with a key |
-| `DocumentConverter` | current binaries; fix the ODT bug at `lib/DocumentToText.php:166` |
-| `SearchIndex` | MySQL FULLTEXT, Sphinx/Manticore |
-| `JobDistribution` | Indeed XML feed, schema.org `JobPosting` JSON-LD, Google for Jobs sitemap; push adapters where job boards support them |
-| `IdentityProvider` | SQL (bcrypt/argon2), LDAP over TLS with escaping, OIDC |
-| `CalendarSync` | ICS feed first; CalDAV or Graph later |
-
-### 7.6 Migration order
-1. **Stop the bleeding.** Fix API-002, 003, 004, 005, 006, 007, 010, 019, and 012a. All are small, local code changes.
-2. **Contract freeze.** Add HTTP contract tests for the 32 legacy handlers and the public feeds (API-021).
-3. **Service extraction.** Build services and the `/api/v1` skeleton, with token authentication, OpenAPI, and read-only endpoints for candidates, companies, contacts, job orders, and the public jobs resource.
-4. **Writes and events.** Add pipelines, activities, and attachments, plus the outbox and webhooks.
-5. **Migrate the UI.** Move UI JS from `AJAX_callCATSFunction` to `/api/v1`, one handler at a time following §7.3. Remove each `ajax/*.php` once its last consumer is migrated. Consumers are listed in §2.4.
-6. **Retire legacy surfaces.** Remove `modules/toolbar`, `wsdl/`, `ParseUtility`, and `$filters`/`AJAX_HOOK` `eval`, and replace `rss/` and `xml/` with adapters over the public jobs service.
-
----
-
-## Facts vs Assumptions
-
-**FACT (verified in code, and by execution where noted):**
-- Contents of the §2.4 table: authentication lines, ACL presence, response types, and JS consumers (grep-verified).
-- There is no REST/JSON API, SOAP server, webhook, CSRF token, rate limiter, OAuth, SAML, OIDC, or iCal (greps empty).
-- `DataGrid::get` regex is ineffective (executed).
-- `get_magic_quotes_*` do not exist on PHP 8.4 (executed).
-- `rss/index.php` uses `LEGACY_ROOT` without including `config.php`; the undefined-constant fatal was reproduced on PHP 8.4.
-- `isParsingEnabled()` always returns true.
-- The careers `candidateID` trust and the argument misalignment.
-- The ODT `$filename` typo.
-- `Users::getPassword` and `PASSWORD_RESET_*` are undefined.
-- `ToolbarUI::getLicenseKey` is unauthenticated.
-- `Mailer` uses `PHPMailer(true)` without try/catch.
-
-**Observed from the sandbox through its egress proxy (2026-09-25):**
-- `soap.resfly.com` does not resolve.
-- The Google Geocoding API returns `REQUEST_DENIED` without a key.
-- `www.catsone.com/catsnewversion.php` returned 403. This is inconclusive because the proxy may have caused it.
-
-**INFERENCE:**
-- PHPMailer 6 throws on an invalid `AddAddress` or a failed `Send` in exception mode, and defaults to the `mail()` transport.
-- PHP ignores a session ID sent in POST under the default `session.use_only_cookies=1`.
-- On PHP 7.2, `rss/index.php` produces a warning followed by a fatal "Class not found".
-- `.htaccess` rules do not apply under the nginx Docker image.
-- `scripts/makeBackup.php` can run over the web if `register_argc_argv` is on.
-- Leftover queue rows are not processable.
-- With ext-soap loaded, parsing fails gracefully through `SoapFault`; without it, a fatal error occurs.
-
-**ASSUMPTION (external knowledge):**
-- Resfly (the Cognizo/CATS parsing SaaS) has been shut down.
-- SimplyHired's 2007 XML intake URL and Indeed's 2007 feed schema are obsolete.
-- The toolbar targets a legacy XUL Firefox extension, and those stopped working with Firefox 57.
-- Sphinx/Manticore compatibility with API command version `0x107` is untested.
-
----
-
-## Unknowns / Needs Further Investigation
-1. **Web server configuration in production.** Whether nginx or Apache denies direct access to `QueueCLI.php`, `rebuild_old_docs.php`, `scripts/`, `modules/*/ajax/*.php`, `attachments/`, and `upload/`. The repo has no nginx configuration, and `.htaccess` is Apache-only.
-2. **PHP runtime flags on deployed hosts:** `session.use_only_cookies`, `session.cookie_samesite`, `register_argc_argv`, `display_errors` (which affects whether notices break XML), and whether ext-soap and ext-ldap are loaded in `opencats/php-base:7.2-fpm-alpine`.
-3. **Whether `INSTALL_BLOCK` reliably exists after install.** CI creates it manually (`ci.yml` step "touch ./INSTALL_BLOCK"). If it is missing, `install:ui` allows unauthenticated `config.php` rewrites.
-4. **Exploitability of API-007.** Whether an attacker can place a file named `dataGrids.php` anywhere reachable by a relative path (upload staging directories, temp directories).
-5. **Actual behaviour of the Indeed and Google for Jobs ingestion** of the current `/xml/?t=indeed` output (double-encoded CDATA, hard-coded company). This needs a live test with Indeed's feed validator.
-6. **The queue in practice.** Whether any production install runs `QueueCLI.php` under cron. Check whether `queue.time` exists and how old it is.
-7. **Whether any site has enabled `candidateRegistration` or custom career-portal templates** that add verification fields. This changes the practical reach of API-004.
-8. **Third-party consumers of `ajax.php` or the feeds.** Access logs are needed to see whether external scripts call `ajax.php` or the feeds today; such consumers would need a compatibility shim during migration.
-9. **Whether the `CAREERS_SITEID`, `RSS_SITEID`, and `XML_SUBMIT_FEEDS_TO_QUEUE` hooks were implemented in a proprietary hosted edition.** They are absent from this repo; their existence suggests multi-site feed support existed elsewhere.
+- **Re-rated:** API-001 HIGH → MEDIUM (absence of a capability, not a broken workflow, under this edition's scale).
+- **Merged:** API-018 → ARCH-016 (queue/cron defects duplicated the architecture finding); API-019 → ARCH-001 (same PHP 8 blockers). Stubs kept.
+- **New:** API-023 (careers apply drops an unstaged résumé; RT-12).
+- **Upgraded to Runtime:** API-011 (RT-03, RT-04), API-012 (RT-05; #89 shows hard-coded company/country, empty postal code and double-encoded URL), API-015 (#77 PHP fatal returned inside an AJAX response with HTTP 200). Partial: API-010 (#22 parser UI shown with `PARSING_ENABLED=false`), API-013 (code plus an out-of-app probe).
+- **Security-owned findings shortened:** API-002, API-004, API-005, API-006, API-007, API-008 now state the weakness, location, reach and impact, and point to SEC-024, SEC-025, SEC-026, SEC-004, SEC-027, SEC-028; attack-oriented wording from Phase 0 was removed.
+- **Corrected facts:** hook implementations are 10 (not 3) and hook names 251 (not 232) (API-017); `Candidates::update()` has 32 parameters (API-003); careers `p=search` renders a page but performs no search (§3.1, runtime #83); the XML feed's double encoding and hard-coded employer are now shown at runtime.
+- **Removed:** the Phase 0 "Recommendations: target API design" section (§7: REST/OpenAPI design, auth scopes, resource model, event catalogue, adapters, migration order). Per the brief, target designs are out of scope; the findings above state only what is missing.

@@ -1,688 +1,626 @@
-# OpenCATS — As-Built Architecture
+# OpenCATS — Architecture Assessment
+Complete edition · 2026-09-26 · code at d607279 (OpenCATS 0.9.7.4)
 
-**Scope.** This document describes how the OpenCATS code base at commit `d607279` actually works: its entry points, request lifecycle, module/hook/template machinery, data access, the newer `src/OpenCATS` layer, multi-tenancy, configuration, background processing, search, file storage, a short frontend overview, deployment, and PHP-version compatibility. It ends with architectural findings (ARCH-xxx). Security, database design, UX, performance, tests and dependencies are covered in depth by other audit documents; where this document touches those topics it does so only as far as the architecture needs, and says so.
+## Scope and method
 
-## Method
+- **Inspected (read-only):** every entry point (`index.php`, `ajax.php`, `careers/`, `rss/`, `xml/`, `QueueCLI.php`, `installwizard.php`, `installtest.php`, `rebuild_old_docs.php`, `scripts/*`), the core framework in `lib/` (`ModuleUtility`, `UserInterface`, `Template`, `TemplateUtility`, `Hooks`, `Session`, `ACL`, `DatabaseConnection`, `AJAXInterface`, `QueueProcessor`, `CATSUtility`, `License`, `Attachments`, `DocumentToText`, `Site`), module controllers (`modules/*/*UI.php`), `modules/install/Schema.php` and `modules/install/ajax/*`, `src/OpenCATS/**`, `config.php`, `constants.php`, `composer.json`, `docker/*.yml`, `.github/workflows/ci.yml`.
+- **Commands:** `grep`/`git grep`, `sed -n`, `wc -l`; `php -l` (PHP 8.4.19 CLI) over all 491 tracked `*.php`/`*.tpl` files outside `docs/`; small read-only `php -r` checks on PHP 8.4 (removed functions, `implode()` argument order, property on `null`, mysqli default report mode, the `DataGrid` regex); a read-only Python include walk from each entry point.
+- **Runtime evidence used:** the Phase 0.5 baseline in `docs/baseline/` (unmodified app on PHP 7.2.16 / nginx 1.17.3 / MariaDB 10.7.8, pinned `composer.lock`): `KNOWN_RUNTIME_ERRORS.md` (RT-01…RT-17), `SMOKE_TEST.md` (steps #01–#94), `CURRENT_UI_MAP.md`, `ENVIRONMENT.md`, `INSTALLATION.md`, and raw files in `docs/baseline/evidence/` (`final-run/nginx.log`, `final-run/php_errors.log`, `demo-data-path/*`, `empty-db-before-seed/first-request.html`).
+- **Not done:** no code was executed against a web server or database by this audit; the app was not run on PHP 8; no security testing; no load testing. `.github/workflows/preview.yml`, `docs/baseline/env/` and `docs/baseline/preview/` are audit tooling and are not assessed as product.
+- Security, database, dependency, performance and test details are owned by `SECURITY_AUDIT.md` (SEC-xxx), `DATABASE_AUDIT.md` (DB-xxx), `DEPENDENCY_AUDIT.md` (DEP-xxx), `PERFORMANCE_AUDIT.md` (PERF-xxx) and `TESTING_AUDIT.md` (TEST-xxx). This document states only the architectural part and cross-references them.
 
-- I read the bootstrap and core framework files line by line: `index.php`, `ajax.php`, `config.php`, `constants.php`, `careers/index.php`, `rss/index.php`, `xml/index.php`, `QueueCLI.php`, `installwizard.php`, `installtest.php`, `rebuild_old_docs.php`, `lib/ModuleUtility.php`, `lib/UserInterface.php`, `lib/Template.php`, `lib/Hooks.php`, `lib/Session.php`, `lib/ACL.php`, `lib/DatabaseConnection.php`, `lib/AJAXInterface.php`, `lib/QueueProcessor.php`, `lib/CATSUtility.php`, `lib/License.php`, `lib/NewVersionCheck.php`, and the relevant parts of `lib/TemplateUtility.php`, `lib/DataGrid.php`, `lib/Attachments.php`, `lib/DocumentToText.php`, `lib/Search.php`, `lib/DatabaseSearch.php`, `lib/Site.php`, `modules/*/…UI.php`, `modules/install/Schema.php`, `src/OpenCATS/**`, `docker/*.yml`, `.github/workflows/ci.yml`, `ci/package-code.sh`, `.travis.yml` and `composer.json`/`composer.lock`.
-- I verified every line reference with `grep -n` or `sed -n`.
-- **PHP lint:** `php -l` (PHP 8.4.19) run one file at a time over all 491 `*.php` and `*.tpl` files, and a second pass with `-d error_reporting=-1` to collect compile-time deprecations. Results are in the scratchpad notes (`lint.txt`, `lintwarn.txt`).
-- **Pattern scans:** grep for functions and constructs that PHP 8 removed or deprecated (`get_magic_quotes_*`, `each(`, `create_function`, `mysql_*`, `$str{0}`, legacy `implode($array, $glue)`, `strftime`, `utf8_encode`, `mcrypt_*`, `libxml_disable_entity_loader`).
-- **Behaviour checks:** small PHP 8.4 snippets in the scratchpad confirmed four behaviours: an undefined constant is an `Error`; property assignment on `null` is an `Error`; legacy `implode()` argument order throws `TypeError`; and `@mysqli_connect` throws `mysqli_sql_exception`.
-- **Metrics:** LOC with `wc -l`; include graph by a static transitive include walk (Python, read-only); counts of hook call sites, `$_SESSION` references, `DatabaseConnection::getInstance` calls and ACL checks per module.
-- Nothing in the repository was modified or executed, apart from `php -l`.
+## Summary
 
-## Summary of Findings
-
-| ID | Title | Severity |
-|---|---|---|
-| ARCH-001 | Application cannot boot on any supported PHP version (≥ 8.0); stack pinned to EOL PHP 7.2 | CRITICAL |
-| ARCH-002 | Release/CI pipeline produces an artifact without `vendor/` although runtime hard-requires `./vendor/autoload.php`; CI lints only `src/` | HIGH |
-| ARCH-003 | Pervasive global state: serialized `CATSSession` god-object + DB singleton used as service locators; no DI | HIGH |
-| ARCH-004 | Executable PHP stored as strings (hooks, wizard pages, DataGrid renderers, `PHP:` migrations) and run via `eval()`, partly from `$_SESSION` | HIGH |
-| ARCH-005 | Schema migrations run implicitly during request handling (any new session, including anonymous), with `eval` and removed `mysql_*` calls | HIGH |
-| ARCH-006 | No single front controller: 8+ independent bootstraps; several web-reachable maintenance scripts with no auth/CLI guard | HIGH |
-| ARCH-007 | Authorization is opt-in per action inside each module's `switch`; no central policy; AJAX endpoints only check "logged in" | HIGH |
-| ARCH-008 | Template engine is raw PHP `include` with opt-in escaping; mixed "escape-on-input" vs "escape-on-output" data | HIGH |
-| ARCH-009 | DB error handling is dead code on PHP 7.2 (errors silently swallowed) and bypassed on PHP ≥ 8.1 (uncaught exceptions) | HIGH |
-| ARCH-010 | Data layer = hand-built SQL strings in table-gateway classes that also emit HTML and read `$_SESSION` | MEDIUM |
-| ARCH-011 | God classes and god methods (SettingsUI 3,842 LOC, CandidatesUI 3,582, DataGrid 2,649, 30-parameter `Candidates::add`) | MEDIUM |
-| ARCH-012 | `src/OpenCATS` PSR-4 layer is a thin, partially broken veneer (2 call sites; broken exception classes) | MEDIUM |
-| ARCH-013 | Multi-tenancy is vestigial: `site_id` everywhere, but public portals hard-wired to the first site and attachment download bypasses the tenant filter | MEDIUM |
-| ARCH-014 | Configuration is mutable PHP source with hard-coded defaults/secrets, rewritten at runtime from request data; no env support; config drift | HIGH |
-| ARCH-015 | Module discovery (dir scan + include + instantiate 23 modules + DB lock + 23 `module_schema` SELECTs) runs on every new session; update detection depends on `.svn/entries` | MEDIUM |
-| ARCH-016 | Background processing depends on an unprovisioned cron that calls a web-reachable `QueueCLI.php`; duplicated/inconsistent task framework | MEDIUM |
-| ARCH-017 | Search is REGEXP/LIKE table scans (no FULLTEXT index); optional Sphinx is a 2007-era API plus a forked `Search.php` | MEDIUM |
-| ARCH-018 | File storage inside the web root with 0777 dirs, Apache-only protection, `exec()`-based converters; ODT extraction broken | MEDIUM |
-| ARCH-019 | Large amount of dead/legacy hosted-CATS code (license, toolbar, phone-home, 222 unused hooks, ~4.5k LOC unused lib files) | MEDIUM |
-| ARCH-020 | Error handling by `die()`/HTML error pages; no exceptions, no logging facility | MEDIUM |
-| ARCH-021 | Time-zone model: integer GMT offsets, no DST, SQL rewriting of `DATE_FORMAT()` | MEDIUM |
-| ARCH-022 | Portal shims `include` a file chosen from `PHP_SELF`; `rss/index.php` is broken on every PHP version | MEDIUM |
-| ARCH-023 | Include-order coupling, include cycles, and eager loading (~47 files / ~29k LOC reachable from `index.php` before a module loads) | MEDIUM |
-| ARCH-024 | Frontend: global jQuery 1.3.2 + custom JS + submodal, CKEditor 4 from `vendor/`, IE conditional CSS | LOW |
-| ARCH-025 | Docker setup is dev-only: third-party images not built from repo, PHP 7.2, unpinned MariaDB, phpMyAdmin auto-login published on 8080 | MEDIUM |
-
----
-
-## 1. System Overview
-
-OpenCATS is a server-rendered PHP monolith from about 2007 (CATS 0.9.x; `constants.php:45` has `define('CATS_VERSION', '0.9.7.4')`).
-
-- It has no framework, router, container or ORM.
-- All HTTP traffic enters through a handful of root scripts (mainly `index.php` and `ajax.php`).
-- Pages are PHP classes named `*UI` inside `modules/<name>/`, discovered by scanning the directory.
-- Persistence goes through a mysqli wrapper singleton (`lib/DatabaseConnection.php`) and about 80 procedural "library" classes in `lib/`.
-- Output comes from `.tpl` files, which are plain PHP included by `lib/Template.php`.
-
-```
-                         +---------------------------------------------------------------+
- Browser / feed readers  |                        Web root (repo root)                    |
- -----------------------> index.php  ajax.php  careers/  rss/  xml/  installwizard.php     |
-                         |   |          |         \      |     /       installtest.php     |
-                         |   |          |          '-- include index.php (shims)           |
- cron (expected) ------->|  QueueCLI.php    rebuild_old_docs.php   scripts/makeBackup.php  |
-                         +---|----------|-----------------------------------------------------+
-                             v          v
-     +-----------------------------------------------------------------------------------+
-     |  Bootstrap: config.php (constants, secrets) + constants.php + lib/* eager includes  |
-     |  session_start() -> $_SESSION['CATS'] (CATSSession, serialized)                     |
-     |  $_SESSION['modules'] / $_SESSION['hooks'] (module registry + hook PHP code)        |
-     +-----------------------------------------------------------------------------------+
-                             |                                    |
-                 ModuleUtility::loadModule($_GET['m'])     ajax/<f>.php | modules/<m>/ajax/<f>.php
-                             v                                    v
-     +-----------------------------+      +-----------------------------------------------+
-     | modules/<m>/<M>UI.php       |      | AJAXInterface / SecureAJAXInterface (login    |
-     |  extends UserInterface      |      | check only), echo XML/HTML fragments           |
-     |  handleRequest(): switch(a) |      +-----------------------------------------------+
-     |  eval(Hooks::get(...))      |
-     +-------------+---------------+
-                   | new Candidates($siteID), new JobOrders(...), Search*, DataGrid ...
-                   v
-     +--------------------------------------+    +-------------------------------------+
-     | lib/*.php  "table gateways" + utils  |--->| DatabaseConnection::getInstance()    |
-     | (SQL via sprintf, some HTML, $_SESSION)|  | mysqli, makeQueryString/Integer      |
-     +------------------+-------------------+    | _localizationFilter (TZ rewrite)     |
-                        |                        +------------------+------------------+
-                        |                                           v
-                        |                                  MySQL/MariaDB (55 MyISAM tables)
-                        v
-     +--------------------------------------+   +-----------------------------------------+
-     | Template::display('modules/x/Y.tpl') |   | Filesystem: attachments/site_N/…,       |
-     | = ob_start + include (raw PHP)       |   | upload/, temp/, modules.cache, *.time   |
-     | TemplateUtility::printHeader/Tabs…   |   | exec(): antiword, pdftotext, html2text  |
-     +--------------------------------------+   +-----------------------------------------+
-            ^ src/OpenCATS (PSR-4, composer): Entity/Company|JobOrder + Repositories,
-            | UI/QuickActionMenu — used by lib/Companies.php, lib/JobOrders.php and 4 Show.tpl
-```
-
----
-
-## 2. Entry Points
-
-"Auth" below means what the entry point itself enforces. Module-level authentication is described in §4.
-
-| Entry point | What it bootstraps (evidence) | Auth enforced | Notes |
+| ID | Title | Severity | Confirmation |
 |---|---|---|---|
-| `index.php` | `config.php` (`:42`); `INSTALL_BLOCK` gate (`:44-48`); `constants.php` and 11 lib files (`:59-70`); `session_start()` (`:74-75`); magic-quotes shims (`:93-109`); `CATSSession` creation (`:125-128`); forced-logout DB check (`:142-173`); dispatch (`:176-274`) | Per module: `ModuleUtility::moduleRequiresAuthentication($_GET['m'])` (`:256`, `:261-267`) | The main front controller. `m=logout` is handled inline (`:220-255`). `performMaintenence` POST bypasses the install gate (`:44`). |
-| `ajax.php` | `config.php`, `constants.php`, `DatabaseConnection`, `Session`, `AJAXInterface`, `CATSUtility` (`:38-43`); magic quotes (`:50-61`); resolves `f=name` → `ajax/name.php` or `f=mod:name` → `modules/mod/ajax/name.php` (`:77-92`); `include` with output buffering, `AJAX_HOOK` eval and `$filters` eval (`:110-135`) | **Delegated to each included file.** `SecureAJAXInterface::__construct` starts the session and dies if not logged in (`lib/AJAXInterface.php:202-222`). | 32 AJAX handlers: 27 use `SecureAJAXInterface`, 2 use the public `AJAXInterface` (`ajax/getParsedAddress.php`, `ajax/zipLookup.php`), 3 use neither (`ajax/getReportHTML.php`, which is 0 bytes; `modules/install/ajax/ui.php`, which has its own `INSTALL_BLOCK` guard at `:55`; `modules/install/ajax/maint.php`, which has no guard, deletes `modules.cache` and includes `index.php`, `:30-37`). |
-| `careers/index.php` | Sets `$careerPage = true`, `chdir('..')`, includes `config.php`, `lib/CATSUtility.php`, then `include_once(CATSUtility::getIndexName())` (`:34-39`), i.e. the root `index.php` | None (careers module is public: `modules/careers/CareersUI.php:53`) | The file to include is derived from `$_SERVER['PHP_SELF']` (see ARCH-022). |
-| `rss/index.php` | `$rssPage = true; chdir('..'); include_once(LEGACY_ROOT . '/lib/CATSUtility.php')` **before** `config.php` defines `LEGACY_ROOT` (`:34-38`) | None | **Broken on every PHP version** (ARCH-022). RSS still works via `index.php?m=rss` (`RssUI`, public, `modules/rss/RssUI.php:49`). |
-| `xml/index.php` | `$xmlPage = true`, `chdir('..')`, `config.php`, `CATSUtility`, include `index.php` (`:34-39`) | None (`modules/xml/XmlUI.php:54`) | Public XML job feed (Indeed/SimplyHired templates in `modules/xml/xml_templates/`). |
-| `attachments/index.php` | 0-byte file | n/a | Only a directory-listing guard. Downloads go through `index.php?m=attachments&a=getAttachment` (auth required, `modules/attachments/AttachmentsUI.php:43`). Stored files are also directly addressable under `attachments/site_N/...` if the web server serves them (§14). |
-| `installwizard.php` | `constants.php`, `config.php`, `lib/TemplateUtility.php` (`:4-17`); the UI drives `ajax.php?f=install:ui` | None in the page itself; `modules/install/ajax/ui.php:55` refuses when `INSTALL_BLOCK` exists | Installer writes `config.php` via `CATSUtility::changeConfigSetting` (ARCH-014). |
-| `installtest.php` | `config.php`, `constants.php`, `lib/InstallationTests.php` (`:30-32`); runs core, MySQL, attachments-dir and antiword tests (`:156-161`) | **None, and no `INSTALL_BLOCK` check** | Discloses environment/DB connectivity details to anonymous users (cross-ref security audit). |
-| `QueueCLI.php` | `chdir(dirname(__FILE__))`, `config.php`, `constants.php`, 12 lib files and `modules/queue/constants.php` (`:34-52`); `session_start()` (`:56`); `registerModuleTasks()` (`:78`); `startNextTask()` (`:83`); touches `queue.time` (`:86`) | **None; no `php_sapi_name()` check** | Intended for cron (header comment `:28`) but reachable over HTTP from the web root. |
-| `scripts/*` | `makeBackup.php` (CLI/web dual: `:37-47`, runs a backup when `$_SERVER['argv'][1]` is set, `:53-62`); `sphinxtest.php` (CLI check `:18`); shell scripts (`sphinx_*.sh`, `storeDeletedAttachments.sh`, `mysql_get_prod_db.sh`, `svnkeywords.sh`, `newversion.sh`, `countcode.sh`, `killwhitespace.sh`) | `scripts/index.php` is 0 bytes; no `.htaccess` in `scripts/` | Shell scripts hard-code hosted-CATS paths such as `/usr/local/www/catsone.com/data` (`scripts/sphinx_reindex.sh:14`) and credentials (`scripts/mysql_get_prod_db.sh:8-10`). |
-| `modules/toolbar` (via `index.php?m=toolbar`) | `ToolbarUI` (`modules/toolbar/ToolbarUI.php:51-86`) | Module is public (`:46`). Actions log in with `CATSUser`/`CATSPassword` **from `$_GET`** (`:95-96`) and are gated on `LicenseUtility::isProfessional()` (`:114`), which always returns `true` (ARCH-019) | Legacy Firefox-toolbar API. |
-| `wsdl/` | Static WSDL files: `parse.wsdl`/`status.wsdl` → `http://soap.resfly.com/...` (`wsdl/parse.wsdl:78`, `wsdl/status.wsdl:69`); `keyCheck.wsdl` → `http://catsone.com/keyCheck.php` (`:66`) | n/a | Consumed by `lib/ParseUtility.php:53,135` via `SoapClient` when `PARSING_ENABLED` is true (default `false`, `config.php:51`). `keyCheck.wsdl` has no consumer. |
-| `js/index.php` | 0 bytes | n/a | Listing guard only. |
-| `rebuild_old_docs.php` | `config.php`, raw `mysqli_connect` (`:14`, `:56-63`); re-extracts text for every attachment with `text IS NULL` (`:16-52`) | **None; no CLI guard** | Uses `addslashes()` to build SQL (`:38`). Anonymous HTTP request → full attachment re-index (ARCH-006). |
-| `optional-updates/latest-sphinx-search/` | Drop-in replacement `Search.php` (2,487 LOC, CRLF) and `config.php` (249 lines) | n/a | Manual "copy over core files" upgrade. The shipped `config.php` lacks `LEGACY_ROOT`, `AUTH_MODE` and the LDAP constants (checked with grep), so copying it would break the app. |
+| ARCH-001 | Application cannot run on any supported PHP version (≥ 8.0); stack pinned to EOL PHP 7.2 | CRITICAL | Static |
+| ARCH-002 | Release artifact omits `vendor/` although the runtime hard-requires it; CI lints only `src/` | HIGH | Static |
+| ARCH-003 | Pervasive global state: serialized session god-object and DB singleton used as service locators | HIGH | Static |
+| ARCH-004 | Executable PHP stored as strings (hooks, grid renderers, migrations, wizard, installer) and run with `eval()` | HIGH | Runtime |
+| ARCH-005 | Schema migrations run inside ordinary web requests; a failing migration blocks every request | HIGH | Runtime |
+| ARCH-006 | No single front controller: eight independent bootstraps; maintenance scripts in the web root without guards | MEDIUM | Partial |
+| ARCH-007 | Authorization is opt-in per action; no central policy; AJAX checks only "logged in" | HIGH | Static |
+| ARCH-008 | Raw-PHP templates with opt-in escaping; stored data is a mix of HTML-encoded and raw text | HIGH | Static |
+| ARCH-009 | Database errors are not detected (PHP 7.2) or become uncaught exceptions (PHP ≥ 8.1) | HIGH | Runtime |
+| ARCH-010 | Data layer is hand-built SQL in table gateways that also emit HTML and read the session | MEDIUM | Static |
+| ARCH-011 | God classes and god methods concentrate logic in a few files | MEDIUM | Static |
+| ARCH-012 | `src/OpenCATS` PSR-4 layer is stalled: two entities, three UI classes, broken exception paths | MEDIUM | Partial |
+| ARCH-013 | Multi-site (`site_id`) model is vestigial: portals serve one site, attachment download bypasses the filter | MEDIUM | Static |
+| ARCH-014 | Configuration is tracked, mutable PHP source rewritten at runtime; no environment support | HIGH | Partial |
+| ARCH-015 | Module discovery (scan, include, instantiate 23 modules, DB lock) runs on every new session | MEDIUM | Runtime |
+| ARCH-016 | Background work depends on an unprovisioned cron calling a web-reachable script; task framework defects | MEDIUM | Static |
+| ARCH-017 | Search is REGEXP/LIKE scanning; optional Sphinx integration is a 2007 client and a forked file | MEDIUM | Partial |
+| ARCH-018 | File storage inside the web root; protection relies on Apache `.htaccess`; converter paths broken by default | HIGH | Runtime |
+| ARCH-019 | Hosted-CATS / "Professional" remnants are still loaded and still change behaviour | MEDIUM | Partial |
+| ARCH-020 | No error model: `die()` pages, no handler, no logging; fatals are served as HTTP 200 with stack traces | HIGH | Runtime |
+| ARCH-021 | Time zones are integer GMT offsets applied by rewriting SQL text | MEDIUM | Static |
+| ARCH-022 | Portal shims include a file named by `PHP_SELF`; the RSS shim is broken | MEDIUM | Runtime |
+| ARCH-023 | Include-order coupling, include cycles and eager loading (49 files / 29,276 LOC per request) | MEDIUM | Static |
+| ARCH-024 | Legacy front-end stack loaded globally; rich-text editor does not start; layout not responsive | MEDIUM | Runtime |
+| ARCH-025 | Docker setup is development-only, not reproducible, and its topology breaks features | MEDIUM | Runtime |
+| ARCH-026 | PDF report fetches its own public URL over HTTP (built from the `Host` header) to embed a graph | MEDIUM | Runtime |
+| ARCH-027 | Multi-step workflows have no transaction or outbox; a late failure leaves partial writes | HIGH | Runtime |
+| ARCH-028 | No startup or configuration validation; unusable defaults and empty databases are accepted silently | MEDIUM | Runtime |
+
+28 findings — 1 CRITICAL / 11 HIGH / 16 MEDIUM / 0 LOW · Runtime 12 / Static 11 / Partial 5 / Unverified 0 · no withdrawn or merged stubs in this document (API-018 and API-019 from `API_AUDIT.md` are merged into ARCH-016 and ARCH-001).
 
 ---
 
-## 3. Request Lifecycle (authenticated page, e.g. `index.php?m=candidates&a=show&candidateID=5`)
+## 1. Runtime topology and entry points
+
+**As built.** A server-rendered PHP monolith from about 2007 (`constants.php:45` `CATS_VERSION '0.9.7.4'`). No framework, router, container or ORM. Traffic enters through a handful of root scripts; pages are `*UI` classes in `modules/<name>/`; persistence goes through a `mysqli` singleton and about 80 procedural `lib/` classes; output is `.tpl` files included as PHP.
 
 ```
-Browser        index.php             CATSSession      ModuleUtility           CandidatesUI           Candidates/DB           Template/.tpl
-   | GET ...      |                       |                 |                       |                       |                        |
-   |------------->| include config.php (:42), INSTALL_BLOCK? (:44)                   |                       |                        |
-   |              | include constants + 11 lib files (:59-70)                        |                       |                        |
-   |              | session_start() (:75) -- unserialize $_SESSION['CATS'] (class loaded at :67)             |                        |
-   |              | magic quotes (:93-109)  [PHP 8: fatal here]                      |                       |                        |
-   |              |--startTimer/checkForcedUpdate (:131,:136)->|                    |                       |                        |
-   |              |--isLoggedIn -> Users::getForceLogoutData (SELECT) (:142-173)    |                       |                        |
-   |              |--moduleRequiresAuthentication('candidates') (:195,:256)-------->| getModules() (:147)   |                        |
-   |              |                       |   ($_SESSION['modules'] or _refreshModuleList: scan+lock+schema)|                        |
-   |              |--logPageView() (UPDATE user_login) (:271)  |                    |                       |                        |
-   |              |--loadModule('candidates') (:272)--------------------------------->| include modules/candidates/CandidatesUI.php (:71-74)
-   |              |                       |                 | eval(Hooks::get('LOAD_MODULE')) (:76)     |                        |
-   |              |                       |                 | new CandidatesUI() (:78) -> UserInterface::__construct: new Template, siteID/userID from session (UserInterface.php:54-67)
-   |              |                       |                 | ->handleRequest() (:79)                    |                        |
-   |              |                       |                 |                       | eval(Hooks::get('CANDIDATES_HANDLE_REQUEST')) (CandidatesUI.php:83)
-   |              |                       |                 |                       | $action = $_GET['a'] (UserInterface.php:193-201)
-   |              |                       |<-- getAccessLevel('candidates.show') (CandidatesUI.php:89 -> UserInterface.php:429-432 -> Session.php:403-406 -> ACL.php:52-84)
-   |              |                       |                 |                       | show() (:458) -> new Candidates($siteID) (:476)
-   |              |                       |                 |                       |---------------------->| DatabaseConnection::getInstance() (DatabaseConnection.php:53-75)
-   |              |                       |                 |                       |                       | sprintf SQL + makeQueryString -> query() (:159-223)
-   |              |                       |                 |                       |                       | _localizationFilter rewrites DATE_FORMAT (:648-712)
-   |              |                       |                 |                       | $this->_template->assign('data',...) (:719-736)
-   |              |                       |                 |                       | ->display('./modules/candidates/Show.tpl') (:738) --------------------->|
-   |              |                       |                 |                       |                       | Template::display (Template.php:98-129): ob_start; include .tpl;
-   |              |                       |                 |                       |                       | strip leading whitespace; eval filters; echo
-   |              |                       |                 |                       |                       | Show.tpl:2 include ./vendor/autoload.php; :9 TemplateUtility::printHeader
-   |              |                       |                 |                       |                       | :12 printTabs -> ModuleUtility::getModules (TemplateUtility.php:570-596)
-   |<-------------------------------------------------------------------------------- HTML --------------------------------------------------------|
+ Browser / applicant / feed reader / cron (expected)
+   |            |               |              |                 |
+ index.php   ajax.php        careers/ xml/    rss/ (broken)    QueueCLI.php, rebuild_old_docs.php,
+   |        f=fn | f=mod:fn   (chdir + include index.php)       installtest.php, installwizard.php
+   |            |                                               (own bootstraps, no auth)
+   v            v
+ config.php (constants, secrets) + constants.php + eager lib/* includes (49 files)
+ session_start() -> $_SESSION['CATS'] (serialized CATSSession), $_SESSION['modules'|'hooks']
+   |                              |
+   | first request of a session:  ModuleUtility::_refreshModuleList()
+   |   scan modules/ -> include + new every *UI.php -> GET_LOCK -> processModuleSchema() (eval'd PHP:)
+   v                              v
+ ModuleUtility::loadModule($_GET['m'])        ajax/<fn>.php | modules/<m>/ajax/<fn>.php
+   -> <M>UI::handleRequest(): switch($_GET['a'])   SecureAJAXInterface (login only) -> XML/HTML/text
+      eval(Hooks::get(...)), inline access checks
+   |
+   v
+ lib/* table gateways (sprintf SQL, some HTML, read $_SESSION) --> DatabaseConnection::getInstance()
+   |                                                                (mysqli, DATE_FORMAT rewrite)
+   v                                                                        |
+ Template::display(.tpl) = ob_start + include (raw PHP)                     v
+ TemplateUtility::print* (header, tabs, footer)                   MySQL/MariaDB: 55 MyISAM tables
+   |
+   +--> Filesystem in web root: attachments/site_N/..., upload/, temp/, config.php (rewritten), queue.time
+   +--> exec(): antiword / pdftotext / html2text      +--> SMTP (PHPMailer, synchronous)
+   +--> HTTP to own public URL (PDF graph, RT-09)     +--> optional: LDAP, Sphinx, Resfly SOAP, catsone.com
+ src/OpenCATS (PSR-4): Company/JobOrder repositories + QuickActionMenu, loaded via cwd-relative vendor/autoload.php
 ```
 
-Step detail (FACT, verified):
+Baseline topology (`docs/baseline/ENVIRONMENT.md` §2): nginx 1.17.3 container → PHP-FPM 7.2.16 container (all `*.php` → `php:9000`) → MariaDB 10.7.8; the repo is the document root. The full entry-point inventory is in Reference R1.
 
-1. **Config and install gate.** `index.php:42` includes `./config.php`, which defines 82 constants: DB credentials, paths, mailer, LDAP, `LEGACY_ROOT='.'` (`config.php:34-37`). Without `INSTALL_BLOCK` the request goes to `modules/install/notinstalled.php` (`index.php:44-48`). `INSTALL_BLOCK` is created by the installer (`modules/install/ajax/ui.php:973-975`).
-2. **Eager includes** at `index.php:59-70`. Note that `TemplateUtility.php:38` does `include_once('./vendor/autoload.php')` (a path relative to the current directory) and pulls in `Candidates.php` at file scope (`:39`), plus `Companies.php` conditionally inside `printTabs` (`:748`). As a result, most of the candidate/job-order domain graph loads on every request (ARCH-023).
-3. **Session.** `@session_name(CATS_SESSION_NAME); session_start();` (`index.php:74-75`). `$_SESSION['CATS']` holds a serialized `CATSSession` object (`lib/Session.php:40-87`: 46 private fields including `_password` (the stored hash, `:788`), `_MRU`, data-grid preferences, `_storedData`). The class must be loaded before `session_start()` so it can be unserialized, which is why `lib/Session.php` is included at `index.php:67` first. There is no `session_regenerate_id()` anywhere in the code base (grep), so the session ID is not rotated on login (cross-ref security audit).
-4. **Per-request DB work before dispatch:** `Users::getForceLogoutData()` SELECT (`index.php:144-145`) and `logPageView()`, which calls `Users::updateLastRefresh` (an UPDATE on every page view, `lib/Session.php:618-630`, called at `index.php:207,271`).
-5. **Dispatch.** A nested `if/else if` on `$careerPage`/`$rssPage`/`$xmlPage`, the forced logout, and `$_GET['m']` (`index.php:176-274`). The module name is whitelisted against the discovered module registry (`lib/ModuleUtility.php:53-67`), so `m` cannot be used for path traversal.
-6. **Module execution.** `loadModule` includes the UI file, evaluates the `LOAD_MODULE` hook, instantiates the class and calls `handleRequest()` (`lib/ModuleUtility.php:51-80`). Each module implements its own `switch ($action)` with inline access-level checks (§5).
-7. **Rendering.** `Template::display` includes the `.tpl` inside output buffering, strips leading whitespace on every line unless the output contains `<!-- NOSPACEFILTER -->` or `textarea`, evaluates any registered filters, and echoes the result (`lib/Template.php:98-129`). Templates call static `TemplateUtility::print*` helpers, which read `$_SESSION['CATS']` directly (e.g. `TemplateUtility.php:1166`).
-8. **Termination.** Errors end the request with `die()` via `CommonErrors::fatal` (`lib/CommonErrors.php:68+`) or `UserInterface::fatal` (`lib/UserInterface.php:242-272`). The footer prints server response time and version (`TemplateUtility.php:829-833`) and, randomly on about 1 in 11 requests, may rewrite `config.php` (`:842-848`; dead in practice because `validateProfessionalKey` always returns `true`).
+### ARCH-006 — No single front controller; maintenance scripts in the web root without guards
+*Confirmation: **Partial** · Phase 0 severity: HIGH → now MEDIUM (security part is owned by SEC-028/API-008 at MEDIUM; the remaining cost is maintainability) · Related: SEC-028, API-008, ARCH-022, RT-05*
+
+- **Confirmed fact:** Eight scripts bootstrap the application independently, each with its own include list: `index.php`, `ajax.php`, `QueueCLI.php`, `installwizard.php`, `installtest.php`, `rebuild_old_docs.php`, `scripts/makeBackup.php`, `modules/install/ajax/ui.php`. The magic-quotes shim is copied three times. `ajax.php` has no `INSTALL_BLOCK` gate (only `index.php:44` has one). `QueueCLI.php`, `rebuild_old_docs.php` and `installtest.php` have no authentication and no `php_sapi_name()` check; only `scripts/makeBackup.php:37` and `scripts/sphinxtest.php:18` check the SAPI.
+- **Evidence:**
+  - Bootstraps: `index.php:42-75`, `ajax.php:36-41`, `QueueCLI.php:34-56`, `installtest.php:32`, `rebuild_old_docs.php:14`, `modules/install/ajax/ui.php:30-32`.
+  - Magic-quotes copies: `index.php:93-109`, `ajax.php:50-61`, `QueueCLI.php:59-70`.
+  - Drift observed at runtime: `rss/index.php` lacks the `config.php` include its siblings have and is fatal (RT-05, step #88; see ARCH-022).
+  - Reachability: the baseline nginx routes every `*.php` under the repo root to PHP-FPM (`ENVIRONMENT.md` §2). Not requested during the baseline.
+- **Impact:** Each entry point drifts on its own (one is already broken). Cross-cutting concerns (error handling, security headers, session settings) have no single place to live. Anonymous users can start queue runs, attachment re-indexing and environment tests (details under SEC-028).
+- **Severity:** MEDIUM — notable maintainability cost; the security consequence is rated separately in SEC-028.
+- **Recommendation:** Give all entry points one shared bootstrap so configuration, session and error handling are defined once, and keep CLI-only scripts out of the web root or behind a CLI check, so that they cannot be triggered over HTTP.
+- **Unknown / needs further validation:** Whether production web servers deny these scripts (the repo ships no nginx rules). Needs a review of real deployment configurations.
+
+### ARCH-022 — Portal shims include a file named by `PHP_SELF`; the RSS shim is broken
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: RT-05, API-012, SEC-010*
+
+- **Confirmed fact:** `careers/index.php` and `xml/index.php` set a flag, `chdir('..')`, include `config.php` and then `include_once(CATSUtility::getIndexName())`, which returns the last path segment of `$_SERVER['PHP_SELF']`. `rss/index.php` uses `LEGACY_ROOT` before any config is loaded. The same `getIndexName()` value is printed unescaped into a JavaScript string on every page.
+- **Evidence:**
+  - `careers/index.php:34-39`, `xml/index.php:34-39`, `rss/index.php:34-38` (`LEGACY_ROOT` at `:37`); `lib/CATSUtility.php:304-329`; `lib/TemplateUtility.php:1195`.
+  - RT-05 / step #88: `/rss/` returns HTTP 200 with "Use of undefined constant LEGACY_ROOT" and "Class 'CATSUtility' not found in rss/index.php:38" (`evidence/final-run/php_errors.log`). The careers "RSS Feed" button links to it.
+  - The careers shim (#80–#86) and XML shim (#89) work.
+- **Impact:** The advertised RSS feed URL is dead. The include target and a JS string depend on a request-derived value; with PATH_INFO enabled this could influence what is included (see SEC-010; not tested).
+- **Severity:** MEDIUM — one public feature is broken; the include pattern is a latent weakness.
+- **Recommendation:** Make the shims include the front controller by a fixed path and stop deriving file names or script URLs from `PHP_SELF`, so behaviour no longer depends on the request path.
+- **Unknown / needs further validation:** Whether PATH_INFO is enabled on real deployments and whether it changes the include target. Needs authorized security testing on an isolated instance.
+
+### ARCH-025 — Docker setup is development-only, not reproducible, and its topology breaks features
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: RT-09, RT-17, DEP-008, SEC-023, ARCH-026*
+
+- **Confirmed fact:** The repo has no Dockerfile. `docker/docker-compose.yml` uses third-party images (`prooph/nginx:www`, `opencats/php-base:7.2-fpm-alpine`), an unpinned `mariadb` image with port 3306 published, and phpMyAdmin on 8080 with `PMA_USER`/`PMA_PASSWORD` set (auto-login). The whole repo is mounted as the document root and the dev DB is seeded from `test/data`. There is no cron, healthcheck or TLS service.
+- **Evidence:**
+  - `docker/docker-compose.yml:5,14,20-22,26-36,41-49`; `docker/docker-compose-test.yml`.
+  - Baseline images: nginx image built 2019-08-22, PHP image built 2019-03-19 (PHP 7.2.16, Composer 1.8.4); the nginx image adds its own headers, including `Access-Control-Allow-Origin: *` (`ENVIRONMENT.md` §2).
+  - In this two-container topology the job-order PDF fails (RT-09, #54) and `.htaccess` protections are ignored, so stored files are downloadable by URL (RT-17).
+- **Impact:** There is no supported production deployment recipe. Following the compose file exposes the database through phpMyAdmin without a login. Behaviour depends on image contents the repo does not control.
+- **Severity:** MEDIUM — deployment is fragile and features break in the project's own topology.
+- **Recommendation:** Keep the image build and web-server rules in the repository and pin every image, so the tested topology is reproducible and matches what the code assumes (Apache-style protections, self-reachable host).
+- **Unknown / needs further validation:** What real installations use (Apache vs nginx, single host vs containers). Needs a deployment survey.
+
+### ARCH-026 — PDF report fetches its own public URL over HTTP to embed a graph
+*Confirmation: **Runtime** · New in this edition · Related: RT-09, ARCH-025, API-014, SEC-017, PERF-013*
+
+- **Confirmed fact:** `generateJobOrderReportPDF` builds `http(s)://<HTTP_HOST>/<dir>/index.php?m=graphs&a=jobOrderReportGraph&data=…` with `CATSUtility::getAbsoluteURI()` and passes it to FPDF, which fetches it with `GetImageSize()`/`fopen()` from inside PHP. The server-side request carries no session cookie, so the graph action must be public; `GraphsUI` serves it (and four other actions) without login.
+- **Evidence:**
+  - `modules/reports/ReportsUI.php:490-500` (FIXME comments on the cookie problem; `$pdf->Image($URI, …)`); `lib/CATSUtility.php:220-240` (`$_SERVER['HTTP_HOST']`); `lib/fpdf/fpdf.php:1508`; `modules/graphs/GraphsUI.php:76-98` (public actions).
+  - RT-09 / #54: `getimagesize(http://localhost:8080/…): failed to open stream: Connection refused` then "FPDF error: Missing or incorrect image file"; the same request with `Host: web` returns a valid PDF (`evidence/final-run/joborder-report-with-internal-host.pdf`).
+- **Impact:** The job-order PDF works only where the PHP host can reach the public URL the browser used. It fails behind containers, proxies, split DNS or TLS termination. The design also forces an unauthenticated graph endpoint and makes the server request a URL chosen by the client's `Host` header.
+- **Severity:** MEDIUM — a feature is broken in common topologies, and the coupling widens the public surface.
+- **Recommendation:** Generate report images in-process instead of over HTTP, so report generation no longer depends on network topology or on a public graph endpoint.
+- **Unknown / needs further validation:** Behaviour behind a TLS-terminating proxy and on single-host Apache installs. Needs a test on those topologies.
 
 ---
 
-## 4. Module System (`lib/ModuleUtility.php`, `lib/UserInterface.php`)
+## 2. Request lifecycle, modules and schema migrations
 
-- **Discovery** (`_refreshModuleList`, `:193-313`) runs when `$_SESSION['modules']` is empty (`:152-156`), i.e. on the **first request of every session**:
-  1. It lists `MODULES_PATH` (`./modules/`, `config.php:147`) (`:221-239`).
-  2. It takes a DB advisory lock, `GET_LOCK('CATSUpdateLock', 120)` (`:242-243`; `DatabaseConnection.php:426`).
-  3. For every file ending in `UI.php` in each module directory, it `include_once`s the file, **instantiates the class**, and records `[class, tabText, subTabsExternal, settingsEntries, settingsUserCategories]` (`:246-274`).
-  4. It merges `getHooks()` into `$hooks` (`:276-280`) and runs `processModuleSchema()` (`:282`).
-  5. It stores `$_SESSION['hooks']` (`:296`), sorts modules by the `$coreModules` order in `constants.php:30-41` using `uksort($modules, array('self','_sortModules'))` (`:299`, a `'self'` callable that PHP 8.2 deprecates), and verifies the core modules are present (`:302`, `:321-344`).
-- **Caching.** With `CACHE_MODULES` (default `false`, `config.php:256`) the registry is read from `modules.cache` in the **web root** with `unserialize` (`:208-215`). Writing the cache assigns properties to an undefined `$modulesCache` (`:307-309`); on PHP 8 that throws `Error: Attempt to assign property on null` (verified).
-- **Per-module schema.** `UserInterface::$_schema` is an array of `version => SQL | 'PHP:<code>'`. `processModuleSchema` compares it with the `module_schema` table and applies pending entries. SQL is split on `;`, and `PHP:` entries are **`eval`'d** (`:443-573`, eval at `:538-543`). Only the `install` module (`CATSUI`) declares a schema, `CATSSchema::get()` (`modules/install/CATSUI.php:39`): 364 versions in `modules/install/Schema.php`, 25 of them `PHP:` blocks.
-- **Authentication flag.** `moduleRequiresAuthentication()` includes and **instantiates** the module (so constructor side effects run before auth) and returns `$_authenticationRequired` (`:109-140`). Public modules: `careers`, `graphs`, `install`, `login`, `rss`, `toolbar`, `wizard`, `xml` (grep of `_authenticationRequired = false`). `graphs` exposes 5 actions without login (`modules/graphs/GraphsUI.php:80-99`).
-- **Base class.** `UserInterface` (`lib/UserInterface.php:38-433`) provides the template instance, `_siteID`/`_userID` from the session (`:54-67`), `getAction()` (the raw `$_GET['a']`, `:193-201`), `isPostBack()` (`$_POST['postback']`, `:209-217`), input helpers (`isRequiredIDValid`, `getTrimmedInput`, `getSanitisedInput` (which HTML-encodes), `:318-395`), `fatal()`/`fatalModal()` (`:242-306`) and `getUserAccessLevel()` (`:429-432`).
-- **Action dispatch.** There is no routing table. Every module hand-writes `switch ($action)` in `handleRequest()`, e.g. `modules/candidates/CandidatesUI.php:81-370` (32 `case` labels; the default case is `listByView`, `:360-368`).
-- **Sub-tabs and access-levelled menu items** are encoded in strings such as `'...&a=add*al=200@candidates.add'` (`CandidatesUI.php:75`) and parsed at render time by `TemplateUtility::printTabs` (`lib/TemplateUtility.php:570-800`). Tabs are always shown to demo users (`:651-652`).
-- **Tasks.** `registerModuleTasks()` includes `modules/*/tasks/tasks.php` (`:86-101`); see §12.
+**As built.** `index.php` loads config and 11 lib files (whose own includes pull in 49 files), starts the session, and on the first request of each session calls `ModuleUtility::_refreshModuleList()`. That scans `modules/`, includes and instantiates every `*UI.php`, takes `GET_LOCK('CATSUpdateLock', 120)`, merges hook strings into `$_SESSION['hooks']`, and runs `processModuleSchema()` for each module. Then `loadModule($_GET['m'])` includes the controller, evaluates the `LOAD_MODULE` hook and calls `handleRequest()`, which switches on `$_GET['a']`. Details in Reference R2–R4. The runtime stack trace in `docs/baseline/evidence/demo-data-path/migration-request.html` shows this exact path on a login-page request: `index.php(215) → loadModule('login') → getModules() → _refreshModuleList() → processModuleSchema('install') → eval() at ModuleUtility.php:542`.
 
-## 5. Authorization Model
+### ARCH-005 — Schema migrations run inside ordinary web requests; a failing migration blocks every request
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: RT-01, RT-02, DB-006, DB-002, ARCH-004, ARCH-015*
 
-- Access levels are integer constants: `DISABLED 0`, `READ 100`, `EDIT 200`, `DELETE 300`, `DEMO 350`, `SA 400`, `MULTI_SA 450`, `ROOT 500` (`constants.php:74-82`). A user has one level (`user.access_level`) plus comma-separated `categories` (`lib/Session.php:796-798`).
-- `CATSSession::getAccessLevel($securedObject)` → `ACL::getAccessLevel()` (`lib/ACL.php:52-84`) walks dotted names (`candidates.show` → `candidates` → root) in `ACL_SETUP::$ACCESS_LEVEL_MAP`. That class exists **only as a commented-out example** in `config.php:343-368`, so `class_exists('ACL_SETUP')` is false and the user's global level is always returned (`ACL.php:54-57`). The fine-grained ACL is inert by default.
-- Checks are written inline per action, e.g. `if ($this->getUserAccessLevel('candidates.show') < ACCESS_LEVEL_READ) CommonErrors::fatal(...)` (`CandidatesUI.php:89-92`). Counts of access checks inside `handleRequest()`: Settings 56, Candidates 32, JobOrders 16, Contacts 9, Companies 9; Import, Calendar, Reports, Lists, Activity, Home, Export and Attachments have **0** there (some check inside methods: Import 7 references, Calendar 8, Lists 2; Reports, Export, Activity and Home have none at all).
-- The AJAX layer checks only that a session exists (`SecureAJAXInterface`, `lib/AJAXInterface.php:251-260`). Only 5 AJAX files reference access levels (`ajax/getPipelineJobOrder.php`, `ajax/setCandidateJobOrderRating.php`, `modules/install/ajax/attachmentsReindex.php`, `modules/install/ajax/attachmentsToThreeDirectory.php`, `modules/settings/ajax/backup.php`).
-- The "career portal" user category is restricted **only through eval'd hooks** defined in `modules/settings/SettingsUI.php:87-128` (see §6).
-
-## 6. Hooks System (`lib/Hooks.php`)
-
-- `Hooks::get($name)` concatenates the PHP code strings registered under `$name` in `$_SESSION['hooks']` and appends `' return true;'` (`lib/Hooks.php:52-72`). Call sites use the idiom `if (!eval(Hooks::get('X'))) return;`, so a hook can abort the caller by returning `false`, or read and modify the caller's local variables.
-- **Reach:** 278 call sites in 50 files and 232 distinct hook names (grep). The largest users are `CandidatesUI.php` (37), `ImportUI.php` (32), `JobOrdersUI.php` (30), `ContactsUI.php` (20), `CompaniesUI.php` (19), `LoginUI.php` (14), `TemplateUtility.php` (10); hooks also appear inside `.tpl` files (e.g. `modules/joborders/Show.tpl`, `modules/candidates/Add.tpl`).
-- **Implementations:** exactly one module defines hooks. `SettingsUI::defineHooks()` (`modules/settings/SettingsUI.php:87-128`) registers 10 hooks that confine `careerportal` users to Settings. The other **222 hook points are no-ops** that remain from hosted CATS (e.g. `CAREERS_SITEID`, `CareersUI.php:81`; `TOOLBAR_AUTHENTICATE_PRE`, `ToolbarUI.php:98`).
-- Similar "code as string" mechanisms: `Template::addFilter()` plus `eval($filter)` (`lib/Template.php:85-88,123-126`; `addFilter` has no callers); `$filters` in `ajax.php:108,125-128`; Wizard pages (`lib/Wizard.php:75-80` stores `phpEval` in `$_SESSION['CATS_WIZARD']`, `modules/wizard/WizardUI.php:179-182` evals it); DataGrid column renderers (§8).
-
-## 7. Template Engine (`lib/Template.php`, `lib/TemplateUtility.php`)
-
-- **Mechanism.** Yes, templates are raw PHP includes. `assign()` creates dynamic public properties on the `Template` object (`$this->$propertyName = $propertyValue`, `lib/Template.php:64-67`; a deprecation on PHP 8.2+), and the `.tpl` is `include`d inside `display()` (`:114-116`), so `$this` inside a template is the `Template` instance. Templates have full PHP power: they use `$_SESSION`, call static services and `include_once('./vendor/autoload.php')` with `use` statements (`modules/candidates/Show.tpl:2-4`), and instantiate `OpenCATS\UI\*` objects (`Show.tpl:29`).
-- **Escaping model: opt-in.** `$this->_($s)` echoes `htmlspecialchars($s)` (`Template.php:51-54`, default flags, no explicit charset). Across 136 templates there are 892 `$this->_(` calls versus 427 `echo($this->…)` and 15 `<?= $this->…` raw outputs (grep counts; not every raw output is unsafe). Example raw sink: `TemplateUtility::_printCommonHeader` echoes `$pageTitle` unescaped (`TemplateUtility.php:1182`), and `Show.tpl:7,9` passes the candidate's first and last name into it.
-- **Escaping is inconsistent at the storage level too.** The career portal HTML-encodes on input (`getSanitisedInput`, `CareersUI.php:1211-1230` → `UserInterface.php:388-395`); migration 362 rewrote every job order's `description`/`notes` with `nl2br(htmlspecialchars())` (`modules/install/Schema.php:1296-1322`); internal UI paths store raw input and escape (or not) on output. The DB therefore holds a mix of encoded and raw text (ARCH-008).
-- **Layout helpers** (`TemplateUtility`, 1,245 LOC) are static functions that emit HTML via `echo`: header (loads `lib.js`, `quickAction.js`, `calendarDateInput.js`, `subModal.js`, `jquery-1.3.2.min.js` on every page, `:1190-1194`), tabs (`:570`), quick search, footer, rating widgets.
-
-## 8. Data Access Layer
-
-- **Connection.** `DatabaseConnection` is a lazily-connected singleton (`lib/DatabaseConnection.php:53-75`) wrapping procedural `mysqli_*` calls (`connect` `:109-145`). `getInstance()` also copies the time-zone offset and date format **from `$_SESSION['CATS']`** on every call (`:62-72`, marked `// FIXME: Remove Session tight-coupling here.`). There are 110 `DatabaseConnection::getInstance()` call sites.
-- **Query building.** SQL is written as `sprintf` templates with values passed through `makeQueryString()` (quote + `mysqli_real_escape_string`, `:495-498`), `makeQueryInteger()` (`(integer)` cast, `:546-549`), `makeQueryStringOrNULL`/`IntegerOrNULL`/`Double`. The code itself flags this: `// FIXME: Security issue, this function is not enough for sanitizing` (`:482-485`). No prepared statements are used anywhere (grep for `prepare(`/`bind_param` in `lib/` and `modules/` returns nothing). `lib/*.php` has 639 `sprintf(` calls whose format string opens on the next line or with a double quote, which is the SQL-building idiom (approximate count by grep).
-- **Query rewriting.** Every query starting with `SELECT` is rewritten: `DATE_FORMAT(` gets wrapped in `DATE_ADD/DATE_SUB(... INTERVAL n HOUR)` and `%m-%d-%y` is swapped for DMY users (`_localizationFilter`, `:648-712`). Writes are blocked when `CATS_SLAVE` (`:635-644`).
-- **Error handling.** `query()` tests `isset($this->_queryResult->connect_errno)` (`:184`, `:198`). `mysqli_query` returns `false` or `mysqli_result`, neither of which has that property, so **both error branches are unreachable**: on PHP 7.2 failed queries return `false` silently, and the `$ignoreErrors` flag (10 callers) is meaningless. On PHP ≥ 8.1 mysqli defaults to exception mode (verified: `@mysqli_connect` throws `mysqli_sql_exception` on 8.4), so every SQL error becomes an uncaught exception and the friendly connect error page (`:115-127`) is bypassed (ARCH-009).
-- **Domain classes** (`lib/Candidates.php`, `JobOrders.php`, `Companies.php`, `Contacts.php`, `Pipelines.php`, `ActivityEntries.php`, `Calendar.php`, `SavedLists.php`, `Users.php`, …) follow a **Table Data Gateway** pattern rather than Active Record: the constructor takes `$siteID` and grabs the DB singleton (`Candidates.php:54-59`); methods return associative arrays (`get`, `getAll`, `add` with positional arguments, e.g. `Candidates::add` with 30 parameters, `:94-99`). They **mix SQL, presentation and session state**. For example, `CandidatesDataGrid` column definitions contain HTML inside PHP strings that are `eval`'d per cell (`'pagerRender' => 'if ($rsData[...]) ... return \'<a href="...">\'...'`, `lib/Candidates.php:1943,1992,2001`, evaluated in `lib/DataGrid.php:1530,1912`; also `filterRender` `:1206,1211` and `exportRender` `:1441`). Counts of HTML fragments / SQL statements / superglobal references: `Candidates.php` 13/67/4, `Calendar.php` 17/13/2.
-- **Cross-dependencies** between gateways are wired with `include_once` and `new` inside methods: `JobOrders` creates `Contacts`, `History`, `Mailer`, `Attachments` (`lib/JobOrders.php:103,240,254,318`); `Pipelines` uses `Mailer` without including it (`lib/Pipelines.php:371`) while `Mailer` includes `Pipelines` (`lib/Mailer.php:46`).
-- **Direct SQL outside lib/:** `modules/install/Schema.php` (124 statements), `modules/import/Import.php` (14), several `dataGrids.php` and a few UI classes (`CandidatesUI`, `SettingsUI`, `CareersUI`, `ImportUI`, `JobOrdersUI`).
-
-## 9. The `src/OpenCATS` PSR-4 Layer
-
-- `composer.json` maps `OpenCATS\\` → `src/OpenCATS/`. There are 24 files / 3,903 LOC: 6 `Entity` files (`Company`, `CompanyRepository`, `CompanyRepositoryException`, `JobOrder`, `JobOrderRepository`, `JobOrderRepositoryException`), 3 `UI` files (`QuickActionMenu`, `CandidateQuickActionMenu`, `CandidateDuplicateQuickActionMenu`), and 15 test files (12 unit, 3 integration).
-- **Usage from legacy code is minimal:**
-  - `lib/Companies.php:89-112`: only `Companies::add()` uses `Company::create()` + `CompanyRepository::persist()`.
-  - `lib/JobOrders.php:106-136`: only `JobOrders::add()` uses `JobOrder::create()` + `JobOrderRepository::persist()`.
-  - `QuickActionMenu` objects are created in 4 `Show.tpl` files and in `TemplateUtility::printSingleQuickActionMenu` (`:1140`).
-- **Coexistence.** The autoloader is not bootstrapped centrally. It is `include_once('./vendor/autoload.php')` (cwd-relative) at file scope in `lib/TemplateUtility.php:38`, `lib/Companies.php:2`, `lib/JobOrders.php:2`, `modules/*/Show.tpl:2`, and `require './vendor/autoload.php'` in `lib/Mailer.php:43`. Repositories take the legacy `\DatabaseConnection` and `\History` (`CompanyRepository.php:11,16`) and build SQL the same way as `lib/`, i.e. they are relocated legacy code, not a new data layer.
-- **Defects:**
-  - `src/OpenCATS/Entity/JobOrderRepositoryException.php:2` reads `namespace \OpenCATS\Entity;`, a parse error on PHP 8 (verified with `php -l`). INFERENCE: on PHP 7 it parses as a constant-fetch expression statement, so the file throws "undefined constant" when autoloaded, and it declares a global-namespace class extending a namespace-relative `Exception`.
-  - `lib/Companies.php:109` catches `CompanyRepositoryException` without importing `OpenCATS\Entity\CompanyRepositoryException` (only `Company` and `CompanyRepository` are imported, `:3-4`). The exception thrown at `CompanyRepository.php:85` is therefore never caught.
-  - `QuickActionMenu` assigns the undeclared property `$this->accessLevel` (`QuickActionMenu.php:13`, dynamic property), reads `$_SESSION` (`:28-30`) and `echo`es HTML (`:22`).
-
-## 10. Multi-Tenancy
-
-- **Schema.** 36 of 55 tables have `site_id` (awk over `db/cats_schema.sql`). Tables without it are lookup/system tables (`access_level`, `system`, `module_schema`, `zipcodes`, …) plus `career_portal_template`, `xml_feeds`, `word_verification`, `installtest`.
-- **Queries.** 342 `site_id = %s`-style predicates in `lib/` and `modules/`, and 900 `_siteID` references. Every gateway is constructed with a site ID taken from `$_SESSION['CATS']->getSiteID()` (`UserInterface.php:64`).
-- **Site model** (`lib/Site.php`): `site.unix_name` identifies a tenant. Login accepts `&s=<unixName>` (`modules/login/LoginUI.php:112-115`), and logout redirects back with `&s=` except for `'demo'` (`index.php:229-234`). `CATS_ADMIN_SITE = 180` (`constants.php:187`) is a special site used for system data (`site` seed row 180 `CATS_ADMIN`, `db/cats_schema.sql:1018`; queue tasks run under it, `QueueProcessor.php:156`).
-- **Public portals are single-tenant in practice.** `careers`, `rss` and `xml` all call `Site::getFirstSiteID()` (the lowest `site_id` other than 180, `lib/Site.php:161-182`; call sites `CareersUI.php:79`, `RssUI.php:103`, `XmlUI.php:107`). Per-site portals relied on the unimplemented `CAREERS_SITEID` hook (`CareersUI.php:81`).
-- **Tenant-filter bypass.** Attachment download uses `new Attachments(-1)` and `get($id, false)` (`modules/attachments/AttachmentsUI.php:83-84`), which makes the WHERE clause `(site_id = -1 || content_type = 'catsbackup' || true)` (`lib/Attachments.php:601-604`). The only guard is `md5(directoryName)` passed in the URL (`AttachmentsUI.php:86`).
-- **Hosted/ASP remnants.**
-  - `CATSSession::_isASP` is derived from `site.company_id != 0` (`Session.php:799`).
-  - `transparentLogin()` (site switching as root, `Session.php:939`) has no callers.
-  - Special cases for `unixName == 'cognizo'` and hard-coded `site 200` (`Session.php:200-212`, "TODO: Remove me").
-  - `ACCESS_LEVEL_MULTI_SA`/`ROOT`.
-  - `index.php:246-250` redirects `demo.catsone.com` to `www.catsone.com` on logout.
-  - `module_schema` seeds a non-existent `extension-statistics` module (`db/cats_schema.sql:858`).
-
-## 11. Configuration Management
-
-- **`config.php`** is PHP source defining constants. It holds the license key (`:31`), DB credentials `cats/password@localhost/cats_dev` (`:40-43`), placeholder converter paths (`:62-81`), SMTP `user/password` (`:219-225`), LDAP bind password (`:273`), tester/demo credentials (`:188-197`), `OFFSET_GMT` (`:180`), feature flags (`ENABLE_SPHINX`, `CACHE_MODULES`, `US_ZIPS_ENABLED`, `CATS_SLAVE`, `ENABLE_DEMO_MODE`), and an optional ACL/job-status config left as **commented-out code** (`:287-368`). There is no environment-variable support (`getenv`/`$_ENV`: 0 hits) and no per-environment files. CI copies `test/config.php` over `config.php` (`.github/workflows/ci.yml:59`).
-- **Runtime mutation.** `CATSUtility::changeConfigSetting($name, $value)` rewrites `config.php` by line prefix match and writes the **raw `$value` as PHP code** (`lib/CATSUtility.php:142-181`). The installer passes request data straight in: `changeConfigSetting('DATABASE_USER', "'" . $_REQUEST['user'] . "'")` (`modules/install/ajax/ui.php:120-135`, also the mail settings `:224-237` and converter paths `:410-422`). Settings (`SettingsUI.php:2727,3124`), `OFFSET_GMT` (`ui.php:524`) and demo mode (`:696,758,782`) are written the same way. The web server therefore needs write access to executable PHP (cross-ref security audit).
-- **`constants.php`**: core module order (`:30-41`), version, access levels, data item types, pipeline statuses, `CATS_ADMIN_SITE`, a hard-coded `$timeZones` list with fractional zones commented out (`:196-283`, "FIXME: Support fractional GMT offsets"), and `$badFileExtensions` (`:286-295`).
-- **DB-stored settings.** Table `settings(setting, value, site_id, settings_type)` (`db/cats_schema.sql:968-975`) with types `MAILER`/`CALENDAR`/`EEO`/`CAREER_PORTAL` (`constants.php:68-71`). Each type has its own near-duplicate settings class: `MailerSettings` (`lib/Mailer.php`), `CalendarSettings` (`lib/Calendar.php`), `EEOSettings` (`lib/Candidates.php:2360`), `CareerPortalSettings` (`lib/CareerPortal.php`). Some values are PHP-`serialize`d (`candidateJoborderStatusSendsMessage`, unserialized at `JobOrdersUI.php:1462`, `SettingsUI.php:2010,2040`). The `system` table holds version-check state (`db/cats_schema.sql:1038-1044`).
-- **Drift and secrets.**
-  - `test/config.php` lacks `LDAP_ATTRIBUTE_*`/`LDAP_SITEID`/`LDAP_ACCOUNT` and adds `LDAP_UID` (diff).
-  - `optional-updates/latest-sphinx-search/config.php` lacks `LEGACY_ROOT`/`AUTH_MODE`/LDAP.
-  - Real-looking credentials are committed: `lib/sphinx/conf/sphinx.conf:14-18` (`sql_host = 192.168.48.4`, `sql_user = dit_db_user`, `sql_pass = '_dit_db_user_P@$$w0r8123.'`) and `scripts/mysql_get_prod_db.sh:8-10` (`10.0.0.66`, `sae`/`sae99`).
-
-## 12. Background Processing
-
-- **Framework.** `lib/QueueProcessor.php` (static class) backed by table `queue`. `addAsynchronousTask()` inserts rows (`:278-301`). `startNextTask()` picks the highest-priority unlocked row (`:166-199`), includes the task file and instantiates the class via `eval(sprintf('$curTask = new %s();', $taskName))` (`:201-217`). Recurring tasks declare a crontab-like `getSchedule()` evaluated by `isTaskReady()` (`:528+`).
-- **Runner.** `QueueCLI.php` is meant to be run by cron (`:28`). It includes every `modules/*/tasks/tasks.php`, which *immediately runs* due recurring tasks via `registerRecurringTask()` (`QueueProcessor.php:126-158`). Registered tasks are `modules/calendar/tasks/Reminders.php` (event e-mail reminders, `modules/calendar/tasks/tasks.php:39`) and `modules/queue/tasks/CleanExceptions.php` (`modules/queue/tasks/tasks.php:39`). It writes marker files `queue.time`/`cleanup.time` into the web root (`modules/queue/constants.php:41-42`, `QueueCLI.php:86,98`).
-- **Provisioning.** No cron is set up in `docker/*.yml`, CI, or docs in the repo, so calendar reminders only work if an operator adds one (UNKNOWN whether the external `opencats/php-base` image ships cron).
-- **Inconsistencies.**
-  - Duplicate, diverging copies exist: `modules/queue/tasks.php` vs `modules/queue/tasks/tasks.php` (the former is never loaded; `registerModuleTasks` loads only `tasks/tasks.php`), and `modules/queue/lib/Task.php` vs `modules/queue/tasks/lib/Task.php` (only the former is included).
-  - `registerRecurringTask` stores the task *name* (`:156`), but `startNextTask` treats the `task` column as a *path* (`getTaskNameFromPath` needs `/Name.php`, `:219-226`). A recurring row left unfinished can never be reloaded by `startNextTask` (INFERENCE from code).
-  - `print_r($taskedModules)` prints the return value of a void method (`QueueCLI.php:78-80`).
-  - The `QueueUI` module is an empty stub (`modules/queue/QueueUI.php:49-56`).
-
-## 13. Search Architecture
-
-- **Quick/list search** (`lib/Search.php`, 2,096 LOC, 9 classes): `LIKE '%…%'` over `CONCAT(first_name, ' ', last_name)`, emails and phones with `REPLACE()` chains (e.g. `Search.php:1358-1376`). None of these can use an index.
-- **Boolean resume/key-skill search.** `DatabaseSearch::makeBooleanSQLWhere()` (`lib/DatabaseSearch.php:214-425`) translates `AND/OR/NOT/*/()` into nested `field REGEXP '[[:<:]]word[[:>:]]'` predicates (`:360-363`) over `attachment.text` / `candidate.key_skills` (callers `Search.php:491,667-670,796,876,1939`). Text is stored "fulltext-encoded" (`fulltextEncode`/`Decode`, `:427-460`).
-- **No FULLTEXT index** exists: `grep -ci fulltext db/cats_schema.sql` returns 0, and all 55 tables are MyISAM.
-- **Sphinx (optional).** When `ENABLE_SPHINX` (`config.php:97-101`), `SearchByResumePager` uses the bundled 2007 `lib/sphinx/sphinxapi.php` (`Search.php:37-40,1868-1920`). The index is maintained by `scripts/sphinx_*.sh`, which default to hosted-CATS paths. `optional-updates/latest-sphinx-search/` ships a forked `Search.php` using `create_function` (`:228,240,301,313`, removed in PHP 8) and a stale `config.php`.
-- ASSUMPTION (external knowledge, not verifiable in repo): MySQL ≥ 8.0.4 (ICU regex) rejects `[[:<:]]`/`[[:>:]]`, while MariaDB (PCRE, used in `docker/`) accepts them. Resume boolean search would therefore fail on MySQL 8.
-
-## 14. File Storage and Document Conversion
-
-- **Layout.** `attachments/site_<siteID>/<floor(id/1000)>xxx/<md5(rand.time.name)>/<safe original filename>` (`lib/Attachments.php:1282-1344`). Directories are created with `0777` and chmod'ed `0777` (`:1288,1299,1313,1349,1364,1382`). An `index.php` is dropped in each level to prevent listing (`:1330-1337`). The DB stores `directory_name` + `stored_filename` (`db/cats_schema.sql:83-107`).
-- **Other writable directories inside the web root:** `upload/` (`FileUtility::getUploadPath`, `mkdir 0777`, `lib/FileUtility.php:468-495`), `temp/` (`CATS_TEMP_DIR`, `config.php:87`), `scripts/backup/` (`makeBackup.php`), `modules.cache`, `queue.time`, and `config.php` itself.
-- **Protection** relies on Apache `.htaccess` in `attachments/` and `upload/` (`AddHandler cgi-script …`, `Options -ExecCGI -Indexes`, extension allow-list); the root `.htaccess` only disables indexes. There is no `.htaccess` in `lib/`, `db/`, `test/`, `scripts/`, `docker/`. INFERENCE: the shipped Docker stack uses nginx (`docker/docker-compose.yml:5`), which ignores `.htaccess`, so these protections do not apply there (the nginx config is inside a third-party image; UNKNOWN).
-- **Text extraction** (`lib/DocumentToText.php`) runs `exec()` of external binaries configured in `config.php` (`ANTIWORD_PATH`, `PDFTOTEXT_PATH`, `HTML2TEXT_PATH`; defaults are Windows-style placeholders such as `"\\path\\to\\antiword"`, `config.php:62-81`) with `escapeshellarg(realpath($fileName))` (`:101-146`, exec at `:378`; the Windows branch uses a `COM('WScript.Shell')` object, `:349-375`). RTF, DOCX and ODT are parsed in PHP: DOCX/ODT via `ZipArchive` + `DOMDocument::loadXML(..., LIBXML_NOENT | LIBXML_XINCLUDE ...)` (`:401-424`; entity expansion is a security concern, cross-ref security audit).
-- **Bugs.** The ODT branch passes the undefined `$filename` instead of `$fileName` (`DocumentToText.php:166`), so ODT extraction always returns empty and fails. `UNRTF_PATH` is defined but unused (RTF is parsed in PHP).
-- **Upload filtering** is extension-based (`$badFileExtensions` → `.txt` appended, `constants.php:286-295`).
-
-## 15. Frontend Architecture (brief; UX document covers depth)
-
-- Server-rendered XHTML 1.0 Transitional pages (`TemplateUtility.php:1178`), 136 `.tpl` files, table layouts, `main.css` (1,379 lines) plus IE-conditional `ie.css`/`not-ie.css` (`:1215-1216`).
-- JavaScript: 40 files in `js/` (11.5k LOC) plus per-module `validator.js` files. Every page loads `jquery-1.3.2.min.js` (2009), a custom `lib.js` and `js/submodal/subModal.js` (popup iframes) (`TemplateUtility.php:1190-1194`). The CKEditor 4 editor is loaded from `vendor/ckeditor/ckeditor/ckeditor.js` (`modules/joborders/Add.tpl:2`), so `vendor/` must be web-served. `composer.lock` pins `ckeditor/ckeditor 4.25.1` and `phpmailer/phpmailer v6.8.0`.
-- AJAX uses custom XML responses (`AJAXInterface::outputXMLPage`, `lib/AJAXInterface.php:47-90`) and HTML fragments. DataGrid state is passed as JSON in GET (`parameters<instance>`, `lib/DataGrid.php:382-399`).
-- One referenced asset is missing: `modules/candidates/activityvalidator.js` and `modules/contacts/activityvalidator.js` do not exist but are loaded (`modules/candidates/AddActivityChangeStatusModal.tpl:3-7`, `modules/contacts/AddActivityScheduleEventModal.tpl:4-6`).
-
-## 16. Deployment Architecture
-
-```
-docker/docker-compose.yml (dev)                    docker/docker-compose-test.yml (CI)
-+------------------+   volumes_from   +--------------------+       same web/php images,
-| prooph/nginx:www |<---------------->| opencatsdata       |       mariadb:10.7 x2 (cats_test,
-| :80, :443        |                  | busybox, ..:/var/  |       cats_integrationtest),
-+--------+---------+                  | www/public (repo)  |       selenium standalone-chrome
-         | fastcgi (image config: UNKNOWN)+---------+----------+       2.53.1
-+--------v--------------------------+       |
-| opencats/php-base:7.2-fpm-alpine  |<------+
-+--------+--------------------------+
-         | DATABASE_HOST from config.php (default 'localhost'; installer rewrites)
-+--------v---------+     +----------------------------------+
-| mariadb (latest) |<----| phpmyadmin :8080, PMA_USER=dev,  |
-| :3306 published  |     | PMA_PASSWORD=dev (auto-login)    |
-+------------------+     +----------------------------------+
-```
-
-- **Compose.**
-  - The repo contains no Dockerfile. Both runtime images are third-party or externally built (`docker/docker-compose.yml:5,14`); PHP is pinned to **7.2** (EOL November 2020, external fact).
-  - The DB image is unpinned (`mariadb`, `:27`), publishes 3306 (`:29`), and mounts `../test/data` as init scripts (`:36`), so the dev DB is seeded with test data.
-  - phpMyAdmin is published on 8080 with credentials in env (`:39-49`).
-  - The repo is bind-mounted as the docroot (`:22`), so everything in the repo (`db/*.sql`, `test/`, `composer.lock`, `.git` if present) is under the web root. Whether nginx blocks these is UNKNOWN.
-- **Install flow.** Browsing to `index.php` without `INSTALL_BLOCK` shows `notinstalled.php` → `installwizard.php` → `ajax.php?f=install:ui` steps: system check, DB connectivity (writes `config.php`), load schema/demo data, resume indexing paths, mail, optional components (via `eval` of `installCode`, `ui.php:544-551,1162`), then `maint` (module schema processing via `modules/install/ajax/maint.php` → `index.php` with `$maintPage`, `ModuleUtility.php:517-536`), and finally creates `INSTALL_BLOCK` (`ui.php:970-975`). `INSTALL_BLOCK` is git-ignored (`.gitignore:1`) and excluded from Travis packages (`ci/package-code.sh:6-7`).
-- **Release packaging.**
-  - GitHub Actions: `release` job (`.github/workflows/ci.yml:106-128`) runs only on `v*` tags after `tests`, and zips the checkout **without running `composer install`** (`:117-119`). `vendor/` is git-ignored (`.gitignore:7,13`). Also, `-x "*.git*"` excludes every path containing `.git`, including `.gitignore`.
-  - Legacy Travis: `ci/package-code.sh:3` runs `composer install --no-dev` before tar/zip (`:6-7`); `.travis.yml` tests PHP 7.2/8.0/8.2 (`:17-20`) and deploys with an encrypted key (`:28-38`). Its presence alongside GitHub Actions means two release paths exist (INFERENCE: Travis is no longer active).
-- **CI.** Matrix `php-version: ['7.2']` (`ci.yml:21`); lint only `src/` (`:44`); `composer audit || true` (`:48`); PHPUnit unit tests, then Docker-based integration and Behat (`:53-81`); the test report does not fail the build (`fail_on_failure: false`, `:92`).
-
-## 17. PHP Version Compatibility
-
-`php -l` with PHP 8.4.19 on 491 `.php`/`.tpl` files reports 6 parse failures (one is intentional in the simpletest suite):
-
-| File | Error | Reached from | Effect on PHP ≥ 8.0 |
-|---|---|---|---|
-| `lib/CATSUtility.php:108,122` | `$data{0}` curly-brace string offset (removed in 8.0) | `index.php:61`, `ajax.php:43`, `QueueCLI.php:40`, `modules/install/ajax/ui.php:32`, `careers|xml/index.php` | **Every web request and the installer die at include time.** |
-| `lib/fpdf/fpdf.php:434` (also `:1189,1456`, `each()` at `:1285`) | `$s{$i}` | `modules/reports/ReportsUI.php:414` (job order PDF report) | PDF report fatal. |
-| `lib/fpdf/font/makefont/makefont.php:18,368` | `$l{0}` | not referenced by the app | none (vendored tool) |
-| `lib/artichow/AntiSpam.class.php:63` | `$letters{...}` | `lib/GraphGenerator.php:43` (when GD is present) | Every graph (`m=graphs`, dashboard/report images, captcha) fatal. |
-| `src/OpenCATS/Entity/JobOrderRepositoryException.php:2` | `namespace \OpenCATS\Entity;` | autoload on job-order insert failure | Fatal on the error path (on PHP 7 too, see §9). |
-| `lib/simpletest/test/test_with_parse_error.php:5` | intentional fixture | — | none |
-
-Runtime incompatibilities found by grep (FACT: code present; effect per PHP changelog):
-
-| Construct | Locations | PHP status | Effect |
-|---|---|---|---|
-| `get_magic_quotes_runtime()` | `index.php:93`, `ajax.php:50`, `QueueCLI.php:59`, `lib/InstallationTests.php:185`, `lib/fpdf/fpdf.php:911,1170` | removed in 8.0 (verified `function_exists` → false on 8.4) | Fatal `Call to undefined function` right after bootstrap, even if CATSUtility were fixed. The installer's core test (`InstallationTests::checkMagicQuotes`) is fatal too. |
-| `get_magic_quotes_gpc()` | `index.php:99`, `ajax.php:56`, `QueueCLI.php:65`, `lib/Attachments.php:944`, `modules/import/ImportUI.php:495` | removed in 8.0 | Fatal |
-| `implode($array, $glue)` legacy order | `lib/DataGrid.php:1292,1299,1328,1329` (in `_getData()`, called from the constructor `:529`) | removed in 8.0 (verified TypeError on 8.4) | **Every DataGrid list page** (candidates, job orders, companies, contacts, home, activity, lists) fatal. |
-| `$modulesCache->x = …` on undefined var | `lib/ModuleUtility.php:307-308` | Error in 8.0 | Fatal when `CACHE_MODULES=true`. |
-| `mysql_real_escape_string`, `mysql_fetch_row` | `modules/install/Schema.php:725,854,1236` (inside `PHP:` migrations) | removed in 7.0 | Fatal when upgrading from old schema versions (already broken on 7.2). |
-| `mcrypt_*` | `lib/Encryption.php:52-110` | removed in 7.2 | Already broken; file unused. |
-| `create_function` | `optional-updates/latest-sphinx-search/Search.php:228,240,301,313` | removed in 8.0 | Fatal if the optional update is applied. |
-| mysqli exception mode default | `lib/DatabaseConnection.php` (all) | default changed in 8.1 (verified behaviour on 8.4) | Silent-failure semantics become uncaught `mysqli_sql_exception`. |
-| Dynamic properties | `lib/Template.php:66,79` (every `assign()`), `src/OpenCATS/UI/QuickActionMenu.php:13`, `lib/Session.php:850` (`$this->_ = unserialize(...)`, which also means column preferences are never loaded) | deprecated 8.2 | Deprecation notices on every page; will be errors in PHP 9. |
-| `array('self', '_sortModules')` callable | `lib/ModuleUtility.php:299` | deprecated 8.2 | notice |
-| `strftime()` | `lib/DateUtility.php:148,472,476,480`, `lib/Calendar.php:575` | deprecated 8.1 | notice |
-| `utf8_encode()` | `lib/DocumentToText.php:424,515` | deprecated 8.2 | notice |
-| `libxml_disable_entity_loader()` | `lib/DocumentToText.php:415` | deprecated 8.0 (no-op) | notice |
-| Optional-before-required parameters | `lib/DatabaseConnection.php:262`, `lib/ActivityEntries.php:162`, `lib/Tags.php:112`, `lib/Profile.php` (11 methods), artichow (3) | deprecated 8.0 (from `php -l` with E_ALL) | notice |
-
-**Assessment.** `index.php` calls `get_magic_quotes_runtime()` at line 93, a function removed in PHP 8.0, but the application already dies earlier, at `index.php:61`, when `lib/CATSUtility.php` fails to compile. Fixing both still leaves the DataGrid `implode` TypeError (all list views), the fpdf/artichow parse errors (reports and graphs), and the mysqli error-mode change. OpenCATS at this commit therefore **supports only PHP 7.x**, and CI, Docker and PHPUnit 7.5 (`composer.json` `"phpunit/phpunit": "^7.5.7"`, locked `7.5.7`, which requires PHP 7.x) all pin it there. The installer's version check only requires PHP ≥ 5.0.0 (`lib/InstallationTests.php:164`), so it does not warn users on PHP 8. The number of hard blockers is small (listed above), but there is no automated coverage outside `src/` to find further runtime breakages (INFERENCE).
-
----
-
-## 18. Architectural Findings
-
-### ARCH-001 — Application cannot boot on any supported PHP version; stack pinned to EOL PHP 7.2
-- **Severity:** CRITICAL
-- **Finding:** Two independent fatal errors on the main bootstrap path, plus further fatal errors in core features, prevent OpenCATS from running on PHP ≥ 8.0. CI and Docker are pinned to PHP 7.2, and the test tool (PHPUnit 7.5) cannot run on PHP 8.
+- **Confirmed fact:** Pending schema changes are applied by `processModuleSchema()` during module discovery, i.e. on the first request of any session, including anonymous careers visitors. Only the `install` module declares a schema: `modules/install/Schema.php` has 195 version keys (highest 364; key `'283'` is declared twice, so the first `'283'` step never runs) and 25 of them are `PHP:` blocks executed with `eval()`. The version row is updated after each step (`:554-569`) without checking the result, so a failed SQL step is recorded as applied; a PHP fatal inside a step aborts before the update, so the same step is retried, and fails, on every later request.
 - **Evidence:**
-  - `lib/CATSUtility.php:108` `if ($data{0} === '<')` → `php -l`: "syntax error, unexpected token "{"". It is included at `index.php:61` and `ajax.php:43`.
-  - `index.php:93` `if (get_magic_quotes_runtime())`; `ajax.php:50`; `QueueCLI.php:59`.
-  - `lib/DataGrid.php:1292` `implode($selectSQL, ','."\n")`, confirmed TypeError on 8.4.
-  - `lib/artichow/AntiSpam.class.php:63`, `lib/fpdf/fpdf.php:434` parse errors.
-  - `.github/workflows/ci.yml:21` `php-version: ['7.2']`; `docker/docker-compose.yml:14` `opencats/php-base:7.2-fpm-alpine`; `composer.json` `"phpunit/phpunit": "^7.5.7"`.
-- **Impact:** Operators must run an end-of-life PHP runtime (no security fixes since 2020) to use the product. Hosting providers and distributions that ship only PHP 8.x cannot run it at all.
-- **Recommendation:**
-  1. Replace `$x{n}` with `$x[n]` in `lib/CATSUtility.php`, or delete `getBuild()`, since SVN is gone (see ARCH-015).
-  2. Delete the magic-quotes blocks in `index.php:92-109`, `ajax.php:49-61`, `QueueCLI.php:58-70`, `lib/Attachments.php:944`, `modules/import/ImportUI.php:495` and `InstallationTests::checkMagicQuotes`.
-  3. Swap the `implode` argument order in `lib/DataGrid.php:1292-1329`.
-  4. Replace vendored fpdf 1.53 and artichow with maintained packages.
-  5. Add PHP 8.2/8.3 to the CI matrix with `php -l` over *all* PHP/TPL files, upgrade PHPUnit, then fix the deprecations in §17.
+  - `lib/ModuleUtility.php:152-156` (discovery when the session has no module list), `:242-243` (lock), `:282` (per-module call), `:443-573` (runner; `eval` at `:542`; version update `:559-569`).
+  - `modules/install/Schema.php:702/725` (`'225'` uses `mysql_real_escape_string()`), `:854` (`mysql_fetch_row`), `:1232/1236` (`'341'`), `:1026-1031` (duplicate `'283'`), `:1328` (`'364'` MD5-hashes passwords); `db/cats_schema.sql:862` seeds `install` at 363.
+  - RT-01 (demo-data install): migrations run from 51 up to 224, then `'225'` fatals ("Call to undefined function mysql_real_escape_string() in ModuleUtility.php(542) : eval()'d code:24"); the version is not saved and every request, including `/careers/index.php`, fails the same way (`evidence/demo-data-path/`).
+  - RT-02 (empty database): the runner treated the missing `module_schema` row as version 0 and created 16 tables in the empty schema, printing 23 warnings from `DatabaseConnection.php:321` (one per module) plus one from `modules/install/scripts/150.php:56`.
+  - `INSTALLATION.md` §1 step 5b: on a normal install, the first `GET /index.php` runs `'364'`, which turns the seeded plaintext admin password into its MD5 hash.
+  - The installer's own SQL runner checks only the connection, not each query (`modules/install/ajax/ui.php:1111-1131`); RT-01 records an ignored error in `db/upgrade-0.9.4-0.9.5.sql`.
+- **Impact:** Upgrade timing is decided by whichever visitor arrives first, under a 120 s DB lock. A broken migration makes the whole application, including the public careers site, return a fatal error on every request, with no recovery path in the UI. Upgrades from pre-225 databases cannot complete on PHP 7 or later. Failed SQL steps are silently marked done.
+- **Severity:** HIGH — the upgrade workflow is broken and one bad step takes the whole site down.
+- **Recommendation:** Run schema changes only as an explicit, operator-invoked step that records a version only after the step succeeds, so ordinary traffic can never trigger or loop on a migration.
+- **Unknown / needs further validation:** How many real installations still carry pre-225 schemas. Needs field data. Behaviour of the remaining 24 `PHP:` steps on PHP 7/8 was not exercised.
 
-### ARCH-002 — Release artifact omits `vendor/` although runtime hard-requires it; CI lints only `src/`
-- **Severity:** HIGH
-- **Finding:** The GitHub release job zips the checkout without running `composer install`, but five runtime files unconditionally include `./vendor/autoload.php`, and CKEditor is served from `vendor/`. CI lint covers 24 of 491 PHP/TPL files.
+### ARCH-015 — Module discovery runs on every new session
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: PERF-006, DEBT-017, TEST-009, ARCH-005*
+
+- **Confirmed fact:** When `$_SESSION['modules']` is empty, `_refreshModuleList()` scans `modules/`, includes and instantiates all 23 `*UI.php` classes (including `TestsUI`, whose file scope sets `error_reporting(E_ALL)` and loads SimpleTest), takes a DB advisory lock and issues one `module_schema` SELECT per module. `moduleRequiresAuthentication()` also includes and instantiates the requested module before the login check. `CACHE_MODULES` is `false` by default, and its write path assigns properties on an undefined variable (a fatal `Error` on PHP 8). Code-change detection (`getBuild()`) reads `.svn/entries`, which does not exist in a git checkout, so logged-in sessions never refresh their module and hook lists after a deployment.
 - **Evidence:**
-  - `.github/workflows/ci.yml:117-119` (`zip -r opencats-${{ github.ref_name }}.zip . -x ...`, with no composer step in the `release` job) and `.gitignore:7,13` (`vendor/*`, `/vendor/`).
-  - Consumers: `lib/TemplateUtility.php:38`, `lib/Companies.php:2`, `lib/JobOrders.php:2`, `lib/Mailer.php:43` (`require`, fatal if missing), `modules/candidates/Show.tpl:2`; `modules/joborders/Add.tpl:2` loads `vendor/ckeditor/...`.
-  - Lint step: `ci.yml:44` `find src -name "*.php" ... php -l`.
-- **Impact:** INFERENCE: a user installing from a GitHub release zip gets a fatal `require` error in `Mailer.php` / missing classes unless they run Composer themselves, which the product does not document in-repo. PHP-version regressions in `lib/` and `modules/` pass CI.
-- **Recommendation:** Add `composer install --no-dev --optimize-autoloader` to the `release` job (as `ci/package-code.sh:3` did for Travis), bootstrap the autoloader once in a shared bootstrap file using `__DIR__` instead of a cwd-relative path, and lint all `*.php`/`*.tpl` in CI.
+  - `lib/ModuleUtility.php:109-140`, `:152-156`, `:193-313` (instantiation `:262-274`, cache write `:305-310`); `modules/tests/TestsUI.php:41-46`; `config.php:256`; `lib/CATSUtility.php:98-132`; `lib/Session.php:111-160`.
+  - PHP 8.4: `$m->x = 1` on an undefined variable throws `Error: Attempt to assign property "x" on null`.
+  - RT-02: 23 `mysqli_fetch_assoc()` warnings, one for each module's `module_schema` SELECT, on a single login-page request; RT-01 stack trace shows discovery on the login page.
+- **Impact:** Every cookie-less client (bots, feed readers, first careers visit) pays a full scan, 23 class instantiations and a DB lock, and can trigger migrations. Test-harness code is loaded into production requests. After an upgrade, existing sessions keep stale module and hook definitions.
+- **Severity:** MEDIUM — measurable per-session cost and a stale-state risk; no functional failure on its own.
+- **Recommendation:** Replace runtime discovery with a static module registry and a version marker that does not depend on SVN, so requests do not scan the filesystem or load test code.
+- **Unknown / needs further validation:** Cost under real traffic (the baseline measured 24–73 ms per page on an almost empty DB). Needs profiling with production-like traffic.
 
-### ARCH-003 — Pervasive global state; session god-object and DB singleton as service locators
-- **Severity:** HIGH
-- **Finding:** All request context (user, site, time zone, access level, MRU, grid state, stored values, the password hash) lives in one serialized `CATSSession` object in `$_SESSION['CATS']`. Library, UI, template and even DB-layer code read it directly. The DB is a static singleton. There is no dependency injection, container or request object.
+### ARCH-004 — Executable PHP stored as strings and run with `eval()`
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: SEC-011, DEBT-004, DEBT-005, API-017, RT-01*
+
+- **Confirmed fact:** Several extension and rendering mechanisms store PHP source as strings and execute it with `eval()`. Hook bodies live in `$_SESSION['hooks']` and are evaluated at 278 call sites in 50 files (251 distinct hook names); only 10 hooks are implemented, all in `SettingsUI::defineHooks()`, and they are the only enforcement of the `careerportal` user category. Other `eval` sites: DataGrid column renderers (82 `pagerRender` definitions), `PHP:` migrations, queue task instantiation, wizard pages stored in the session, installer optional components, careers field handling, template and AJAX output filters.
 - **Evidence:**
-  - `lib/Session.php:40-87` (46 private fields); `$_SESSION` referenced 108 times in 26 `lib/*.php` files and 297 times in `modules/`.
-  - `lib/DatabaseConnection.php:62-72` pulls the time zone from the session inside `getInstance()`; 110 `DatabaseConnection::getInstance()` call sites; 21 static-only utility classes (`private function __construct() {}`).
-  - `$GLOBALS`/`global` used 43 times outside vendored code (e.g. `$GLOBALS['coreModules']`, `ModuleUtility.php:325`; `global $careerPage`, `CareersUI.php:73`).
-- **Impact:** Code cannot be unit-tested without a live session and DB (the 12 unit tests target pure utilities only). Changing the session class shape invalidates live sessions. Horizontal scaling requires sticky or shared PHP session storage. The implicit coupling makes refactoring error-prone.
-- **Recommendation:** Introduce a `RequestContext` value object (userID, siteID, access level, tz) built once in bootstrap and passed to gateway constructors. Make `DatabaseConnection` injectable (constructor parameter with a default of `getInstance()` during migration). Stop storing the password hash and derived state in the session (`Session.php:788`).
-
-### ARCH-004 — Executable code as strings evaluated at runtime (hooks, wizard, grid renderers, migrations)
-- **Severity:** HIGH
-- **Finding:** Extension and rendering logic is stored as PHP strings and executed with `eval()`. Hook bodies and wizard page code are stored in `$_SESSION` and eval'd on later requests.
-- **Evidence:**
-  - `lib/Hooks.php:52-72` (+278 `eval(Hooks::get(...))` sites); `lib/ModuleUtility.php:296` `$_SESSION['hooks'] = $hooks;`.
-  - `lib/Wizard.php:77-80` → `modules/wizard/WizardUI.php:179-182` `eval($php)`.
-  - `lib/DataGrid.php:1206,1211,1441,1530,1912` (82 `pagerRender` definitions, e.g. `lib/Candidates.php:1943`).
-  - `lib/ModuleUtility.php:538-543` (`PHP:` migrations); `lib/QueueProcessor.php:210`; `modules/install/ajax/ui.php:544,551,1162`; `modules/careers/CareersUI.php:280,285,1272`; `lib/Template.php:125`; `ajax.php:127`.
-- **Impact:**
-  - Any ability to write session data (shared `/tmp` session dirs, session-injection bugs) or `modules.cache` becomes code execution.
-  - Static analysis, IDE navigation, opcache and type checking cannot see this code.
-  - Syntax errors in string code surface only at runtime.
-  - Only 10 of 232 hook points are implemented, so the cost buys almost nothing.
-- **Recommendation:**
-  - Replace the 10 real hooks (`SettingsUI.php:87-128`) with an explicit check in each module's `handleRequest` (or a single middleware check on `hasUserCategory('careerportal')`), then delete the `eval(Hooks::get())` lines.
-  - Convert DataGrid renderers to closures/callables in the column definition.
-  - Store wizard steps as method names, not code.
-
-### ARCH-005 — Schema migrations executed implicitly during request handling
-- **Severity:** HIGH
-- **Finding:** DB schema upgrades are applied by `ModuleUtility::_refreshModuleList()` → `processModuleSchema()` whenever a session has no module registry. That happens on the first request of *any* session, including anonymous, cookie-less requests and `POST performMaintenence` (which also bypasses the install gate). Migrations include `eval`'d PHP, some using functions removed in PHP 7. A fresh install from `db/cats_schema.sql` (install module at version 363) runs migration 364 (`UPDATE user SET password = md5(password) WHERE can_change_password=1`) on the first page hit.
-- **Evidence:**
-  - `lib/ModuleUtility.php:152-156`, `:241-243` (GET_LOCK 120 s), `:282`, `:443-573`; `index.php:44` (`!isset($_POST['performMaintenence'])`); `ModuleUtility.php:208,291-294`.
-  - `db/cats_schema.sql:862` (`'install',363`) vs `modules/install/Schema.php:1328-1330` (`'364' => UPDATE user SET password = md5(password)`).
-  - `Schema.php:854` (`mysql_fetch_row`).
-- **Impact:**
-  - Non-deterministic upgrade timing: whichever user or bot arrives first runs long DDL under a 120 s lock while other new sessions block.
-  - A migration failure is silent on PHP 7.2 (see ARCH-009) but still bumps `module_schema.version` (`:559-569`), so a failed step is recorded as applied.
-  - No rollback, no audit trail.
-- **Recommendation:** Move migrations to an explicit CLI command (e.g. `php bin/migrate.php`) run by the installer/upgrade process, record per-step success only after the statement succeeds, drop `performMaintenence` handling from `index.php`, and convert `PHP:` steps into versioned PHP migration classes.
-
-### ARCH-006 — No single front controller; web-reachable maintenance scripts without guards
-- **Severity:** HIGH
-- **Finding:**
-  - Bootstrap logic is copy-pasted across `index.php`, `ajax.php`, `QueueCLI.php`, `installwizard.php`, `installtest.php`, `rebuild_old_docs.php`, `scripts/makeBackup.php` and `modules/install/ajax/ui.php`, each with its own include list and magic-quotes shim (3 copies).
-  - The portal shims (`careers/`, `xml/`) re-enter `index.php` via `include`.
-  - Maintenance scripts live in the web root with no authentication and no `php_sapi_name()` check.
-- **Evidence:**
-  - Magic-quotes copies: `index.php:92-109`, `ajax.php:49-61`, `QueueCLI.php:58-70`.
-  - No guard in `rebuild_old_docs.php:14-65`, `QueueCLI.php:34-124`, `installtest.php:30-161`, `modules/install/ajax/maint.php:30-37`.
-  - `scripts/makeBackup.php:37-62` runs when `$_SERVER['argv'][1]` is set. INFERENCE: via HTTP this depends on `register_argc_argv`.
-  - Only `scripts/sphinxtest.php:18` and `scripts/makeBackup.php:37` call `php_sapi_name()`.
-- **Impact:** Anonymous users can trigger attachment re-indexing (CPU/IO), queue execution, installation tests (information disclosure) and module-schema processing. Each entry point drifts independently (e.g. `rss/index.php` is broken, ARCH-022).
-- **Recommendation:**
-  - Create one `bootstrap.php` (config, autoload, error handling, session) used by all entry points.
-  - Move `QueueCLI.php`, `rebuild_old_docs.php` and `scripts/*.php` into a non-web directory (e.g. `bin/`) with `if (PHP_SAPI !== 'cli') exit(1);`.
-  - Require `INSTALL_BLOCK` absence *and* an installer token for `installtest.php` and `install:maint`.
-
-### ARCH-007 — Authorization is opt-in per action with no central policy
-- **Severity:** HIGH
-- **Finding:**
-  - Authentication is decided per module (`requiresAuthentication()`), but authorization is hand-coded inside each `switch` case, inconsistently.
-  - AJAX handlers only verify that a session is logged in.
-  - The fine-grained ACL map is inactive by default.
-  - The career-portal role restriction is implemented only as eval'd hooks.
-- **Evidence:**
-  - `modules/candidates/CandidatesUI.php:89-92` (typical inline check).
-  - Zero access-level references in `modules/reports/ReportsUI.php`, `modules/export/ExportUI.php`, `modules/activity/ActivityUI.php`, `modules/home/HomeUI.php` (grep count 0).
-  - `lib/AJAXInterface.php:202-222,251-260`; `lib/ACL.php:54-57` with `ACL_SETUP` only commented in `config.php:343-368`; `modules/settings/SettingsUI.php:120-126`.
-- **Impact:** Every new action is a potential privilege-escalation bug (e.g. read-only users calling write AJAX endpoints such as `ajax/deleteActivity.php`; details for the security audit). Reviewing the permission model requires reading about 10k lines of switch statements.
-- **Recommendation:** Build a declarative action map per module (`'show' => ['candidates.show', ACCESS_LEVEL_READ], ...`) enforced in `ModuleUtility::loadModule` before `handleRequest()`, give AJAX handlers the same `[secured object, level]` metadata, and default to deny for unmapped actions.
-
-### ARCH-008 — Template engine with opt-in escaping and mixed storage encoding
-- **Severity:** HIGH
-- **Finding:** Templates are raw PHP includes. HTML escaping requires an explicit `$this->_()` call, and helper functions (`TemplateUtility::*`, DataGrid renderers, `QuickActionMenu`) echo HTML built by concatenation. Some data is HTML-encoded before storage (career portal input, job order description/notes), other data is stored raw, so no single output rule is correct.
-- **Evidence:**
-  - `lib/Template.php:51-54,98-129`: 892 escaped vs 442 raw `$this->` outputs in 136 `.tpl` files.
-  - `lib/TemplateUtility.php:1182` (`echo '<title>OpenCATS - ', $pageTitle` with the candidate name from `modules/candidates/Show.tpl:7-9`).
-  - `modules/careers/CareersUI.php:1211-1230` (`getSanitisedInput` stores entities); `modules/install/Schema.php:1296-1322` (migration 362 HTML-encodes stored descriptions).
-- **Impact:** Systemic XSS risk (cross-ref security audit) and double-encoded text in the UI, exports and XML feeds. Migrating to any auto-escaping engine requires first normalizing stored data.
-- **Recommendation:** Define "store raw, escape on output" as the rule. Write a one-off data normalization for the fields known to be pre-encoded (joborder description/notes, career-portal-created candidates). Add an `e()` helper and migrate templates module by module, or adopt Twig/Plates with autoescape for new or rewritten views.
-
-### ARCH-009 — Database error handling is dead code (PHP 7.2) or bypassed (PHP ≥ 8.1)
-- **Severity:** HIGH
-- **Finding:** `DatabaseConnection::query()` detects errors by testing `connect_errno` on the query result, which never exists. On PHP 7.2, failed queries return `false` without any log or die. Callers mostly ignore return values, and `$ignoreErrors` has no effect. On PHP ≥ 8.1, mysqli throws exceptions by default and nothing catches them.
-- **Evidence:** `lib/DatabaseConnection.php:184` `if (isset($this->_queryResult->connect_errno))` and `:198` (same test). No `mysqli_report()` call in the repo (grep 0). `ModuleUtility.php:554-569` bumps the schema version regardless of the result. Verified on 8.4: `@mysqli_connect(...)` throws `mysqli_sql_exception`.
-- **Impact:** Data-loss risk: writes that fail (constraint, lock, syntax) look successful to users. Migrations get marked as applied after failing. Behaviour changes completely across PHP versions.
-- **Recommendation:**
-  - Call `mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT)` in `connect()`.
-  - Wrap `query()` in try/catch that logs the query hash and message, then rethrows a domain exception.
-  - Remove the `connect_errno` checks.
-  - Fix `processModuleSchema` to update the version only on success.
-
-### ARCH-010 — Data layer: hand-built SQL in table gateways that also render HTML and read the session
-- **Severity:** MEDIUM
-- **Finding:** Persistence is procedural string-built SQL (`sprintf` + escape helpers) with no prepared statements. Gateways mix query logic with presentation (HTML in DataGrid column definitions and Calendar) and read superglobals. Gateways instantiate one another directly, forming include cycles.
-- **Evidence:**
-  - `lib/DatabaseConnection.php:480-498` (FIXME security note); about 639 SQL-style `sprintf(` calls in `lib/*.php` (grep approximation); 0 uses of `prepare(`.
-  - `lib/Candidates.php:1943-2001` (HTML `pagerRender`); `lib/Calendar.php` (17 HTML fragments).
-  - `lib/JobOrders.php:103,254`; `lib/Pipelines.php:371` (`new Mailer` without include) ↔ `lib/Mailer.php:46`.
-- **Impact:** SQL-injection safety depends on every developer remembering the right `makeQuery*` helper on every value. Business rules can't be reused outside the web UI, and gateway logic can't be unit-tested.
-- **Recommendation:** Add a `DatabaseConnection::execute($sql, array $params)` using mysqli prepared statements, migrate gateways incrementally (starting with `Candidates`, `JobOrders`, `Pipelines`, `Users`), and move `pagerRender` HTML into per-module view helpers.
-
-### ARCH-011 — God classes and god methods
-- **Severity:** MEDIUM
-- **Finding:** A few files concentrate most of the logic, with very large dispatchers and long parameter lists.
-- **Evidence:**
-
-  | File | LOC | Methods | `case` actions |
-  |---|---|---|---|
-  | `modules/settings/SettingsUI.php` | 3,842 | 72 | 51 |
-  | `modules/candidates/CandidatesUI.php` | 3,582 | 38 | 32 |
-  | `modules/import/ImportUI.php` | 2,104 | 25 | 13 |
-  | `modules/joborders/JobOrdersUI.php` | 1,972 | 25 | 16 |
-  | `lib/DataGrid.php` | 2,649 | — | — |
-  | `lib/Candidates.php` | 2,473 | 3 classes | — |
-  | `lib/Search.php` | 2,096 | 9 classes | — |
-
-  `Candidates::add()` takes 30 positional parameters (`lib/Candidates.php:94-99`).
-- **Impact:** High change risk and merge conflicts; hard to test or review; slow onboarding.
-- **Recommendation:** Split `SettingsUI` by sub-area (users, career portal, email templates, administration, backups) into separate controller classes behind the same `m=settings`. Replace positional-parameter gateway methods with DTOs or arrays validated in one place.
-
-### ARCH-012 — `src/OpenCATS` layer is a thin, partially broken veneer
-- **Severity:** MEDIUM
-- **Finding:** The PSR-4 layer contains two entities with repositories, used only by `Companies::add` and `JobOrders::add`, and three UI menu classes. Both repository-exception paths are broken. The rest of the app (~43k LOC outside `lib/`, ~47k first-party LOC in `lib/`) does not use it.
-- **Evidence:** `lib/Companies.php:89-112` and `:109` (catch of the unimported `CompanyRepositoryException`); `lib/JobOrders.php:106-136`; `src/OpenCATS/Entity/JobOrderRepositoryException.php:2` (parse error on 8.x); `src/OpenCATS/UI/QuickActionMenu.php:13,22,28`.
-- **Impact:** Two parallel conventions exist without a migration path. Errors on company or job-order insert become fatal instead of returning -1.
-- **Recommendation:** Fix the namespace and `use` statements now. Then decide whether `src/` is the target architecture; if so, document the pattern (entity + repository + service using prepared statements) and migrate one aggregate at a time, starting with the one already present (JobOrder).
-
-### ARCH-013 — Multi-tenancy is vestigial
-- **Severity:** MEDIUM
-- **Finding:** The schema and queries are tenant-scoped by `site_id`, but the public portals only serve the first site, attachment download deliberately bypasses the tenant filter, and a lot of hosted-CATS (ASP) tenancy logic is dead or hard-coded.
-- **Evidence:** 36/55 tables with `site_id`; 342 `site_id` predicates. `lib/Site.php:161-182` + `CareersUI.php:79`/`RssUI.php:103`/`XmlUI.php:107`. `modules/attachments/AttachmentsUI.php:83-86` + `lib/Attachments.php:601-604`. `lib/Session.php:200-212` ('cognizo', site 200); `Session.php:939` (`transparentLogin`, no callers); `constants.php:187` (`CATS_ADMIN_SITE` 180).
-- **Impact:** The code base carries the complexity and risk of multi-tenancy without supporting it end-to-end. Deployments that do create several sites (`&s=unixName` login) get a careers page for only one of them, and attachment access relies on an unguessable hash rather than on tenancy.
-- **Recommendation:** Decide explicitly between single-tenant and multi-tenant.
-  - If single-tenant: remove `unixName`/ASP/root branches and treat `site_id` as a constant.
-  - If multi-tenant: resolve the site from host/path in bootstrap, pass it to the portals, and enforce `site_id` in `Attachments::get` (drop the `$verifySiteID=false` path).
-
-### ARCH-014 — Configuration as mutable PHP source with hard-coded secrets; no environment support
-- **Severity:** HIGH
-- **Finding:** All configuration is PHP constants in a tracked `config.php` with default credentials and a license key. The application rewrites this PHP file at runtime, including values taken directly from HTTP requests during installation. Nothing reads environment variables. There are three drifting copies of the config, and real-looking credentials are committed in auxiliary files.
-- **Evidence:**
-  - `config.php:31,40-43,188-197,219-223,273`; `lib/CATSUtility.php:142-181`; `modules/install/ajax/ui.php:120-135` (`"'" . $_REQUEST['user'] . "'"`).
-  - `getenv`/`$_ENV`: 0 occurrences.
-  - `test/config.php` vs `config.php` diff; `optional-updates/latest-sphinx-search/config.php`.
-  - `lib/sphinx/conf/sphinx.conf:14-18`; `scripts/mysql_get_prod_db.sh:8-10`.
-- **Impact:**
-  - The web server needs write permission on executable code.
-  - Any quote character in installer input corrupts (or injects into) `config.php` (cross-ref security audit).
-  - Twelve-factor/container deployment is impossible without editing code.
-  - Committed credentials must be treated as leaked.
-- **Recommendation:**
-  - Ship `config.php.dist` and git-ignore `config.php`.
-  - Make `config.php` read `getenv()` with defaults.
-  - Have the installer write a separate `config.local.php` using `var_export()`.
-  - Remove `changeConfigSetting` from runtime paths (license, demo mode, `TemplateUtility.php:842-848`).
-  - Delete or redact `lib/sphinx/conf/sphinx.conf` and `scripts/mysql_get_prod_db.sh`, and rotate the credentials if they were ever real.
-
-### ARCH-015 — Per-session module discovery; update detection tied to SVN
-- **Severity:** MEDIUM
-- **Finding:** Every new session triggers a directory scan, includes and instantiates all 23 module classes (including `TestsUI`, which loads SimpleTest and sets `error_reporting(E_ALL)`), takes a DB advisory lock and issues one `module_schema` SELECT per module. `CACHE_MODULES` is off by default and crashes on PHP 8 when on. Code-change detection reads `.svn/entries`, which never exists in a git checkout, so the session module registry and hooks never refresh after a deployment.
-- **Evidence:**
-  - `lib/ModuleUtility.php:152-156,242-243,262-274,459-468,307`; `modules/tests/TestsUI.php:42-46` (file-scope `error_reporting(E_ALL)` and `require_once` of simpletest).
-  - `lib/CATSUtility.php:98-132` (`.svn/entries`); `lib/Session.php:111-160` (`getCachedBuild`/`checkForcedUpdate`).
-  - `config.php:256`.
-- **Impact:**
-  - Cookie-less clients (bots, feed readers hitting `index.php`) each cause the full scan plus DB lock plus session file.
-  - After an upgrade, logged-in users keep stale module and hook definitions, and pending migrations run only when a new session appears.
-  - Test-harness code is loaded into production requests.
-- **Recommendation:**
-  - Replace discovery with a static PHP array registry (generated at deploy time or hand-maintained, like `$coreModules`).
-  - Remove `modules/tests` from production packages.
-  - Replace `getBuild()` with a version constant or deploy timestamp.
-  - Keep migrations out of discovery (ARCH-005).
-
-### ARCH-016 — Background processing relies on an unprovisioned, web-reachable cron script
-- **Severity:** MEDIUM
-- **Finding:** Calendar reminders and queue cleanup run only if something executes `QueueCLI.php` periodically. Nothing in the repo provisions this, the script has no CLI guard, and the task framework has duplicate files and a name/path inconsistency.
-- **Evidence:** `QueueCLI.php:28,34-124`; `modules/calendar/tasks/tasks.php:39`; `lib/QueueProcessor.php:126-158,166-226`; duplicates `modules/queue/tasks.php` vs `modules/queue/tasks/tasks.php`, `modules/queue/lib/Task.php` vs `modules/queue/tasks/lib/Task.php`; no cron in `docker/*.yml`.
-- **Impact:** Event reminder e-mails silently never go out on default deployments (INFERENCE). Anyone can trigger task runs over HTTP.
-- **Recommendation:** Move the runner to `bin/queue-worker.php` with a CLI guard, add a cron (or supervisor loop) service to the Docker compose file, delete the dead duplicate task files, and store task paths consistently.
-
-### ARCH-017 — Search implemented as REGEXP/LIKE scans; Sphinx integration obsolete
-- **Severity:** MEDIUM
-- **Finding:** There is no FULLTEXT index. Boolean resume search compiles to nested `REGEXP '[[:<:]]word[[:>:]]'` over `attachment.text`, and quick search uses leading-wildcard `LIKE` on `CONCAT`/`REPLACE` expressions. The optional Sphinx path uses a 2007 client API and a forked `Search.php` that cannot run on PHP 8.
-- **Evidence:** `lib/DatabaseSearch.php:214-425` (`:360-363`); `lib/Search.php:1358-1376,1868-1920`; `grep -ci fulltext db/cats_schema.sql` → 0; `lib/sphinx/sphinxapi.php` (`$Id ... 2007-04-27`); `optional-updates/latest-sphinx-search/Search.php:228`.
-- **Impact:** Search cost grows linearly with resume volume on MyISAM (table locks). ASSUMPTION: boolean search breaks on MySQL ≥ 8.0.4 (word-boundary syntax).
-- **Recommendation:** Add `FULLTEXT(text)` on `attachment` (InnoDB supports it) and translate the boolean grammar to `MATCH … AGAINST (… IN BOOLEAN MODE)`. Replace `[[:<:]]` with `\\b` for MySQL 8 if REGEXP is kept. Drop the bundled Sphinx API, or replace it with Manticore/OpenSearch behind an interface.
-
-### ARCH-018 — File storage inside the web root with weak isolation; converter integration fragile
-- **Severity:** MEDIUM
-- **Finding:** Attachments, uploads, temp files, backups and cache files are written under the document root with 0777 permissions. Access control relies on Apache `.htaccess` (not applicable to the nginx-based Docker setup) and on hard-to-guess directory names. Text extraction shells out to binaries whose default paths are placeholders. ODT extraction is broken.
-- **Evidence:** `lib/Attachments.php:1282-1363`; `lib/FileUtility.php:468-495`; `attachments/.htaccess`, `upload/.htaccess`; `config.php:62-87`; `lib/DocumentToText.php:101-146,166,378,416-417`.
-- **Impact:** Candidate PII (resumes) may be directly downloadable if the web server serves static files from `attachments/` (INFERENCE for nginx). Resume indexing fails silently when converters are missing. ODT resumes are never searchable.
-- **Recommendation:** Move `attachments/`, `upload/`, `temp/` and backups outside the web root (a configurable `STORAGE_PATH`) and stream files only through `AttachmentsUI` with a tenant check. Use 0750/0640 permissions. Fix `$filename` → `$fileName` at `DocumentToText.php:166`. Default converter paths to `/usr/bin/...` and report missing binaries in the admin UI.
-
-### ARCH-019 — Dead and legacy hosted-CATS code in production paths
-- **Severity:** MEDIUM
-- **Finding:** A large amount of code serves CATS Professional/hosted features that no longer exist. It is still loaded or reachable, and some of it performs network calls.
-- **Evidence:**
-  - License checks all return `true` (`lib/License.php:580-591,658-669`).
-  - `TemplateUtility::printFooter` may rewrite `LICENSE_KEY` (`:842-848`).
-  - Firefox toolbar API (`modules/toolbar/ToolbarUI.php`).
-  - Phone-home to `www.catsone.com:80` sending site name, license key, user agent and active user count (`lib/NewVersionCheck.php:109-122,198-224`; disabled by the seeded `system` row `disable_version_check=1` in both `db/cats_schema.sql:1044` and `test/data/test.sql:1537`; the column default is `0` (`db/cats_schema.sql:1038`), so it is enabled wherever that row is missing).
-  - SOAP parsing via resfly.com (`wsdl/*.wsdl`, `lib/ParseUtility.php`).
-  - 222 unimplemented hook points.
-  - Unused lib files: `ControlPanel.php` (1,573), `Profile.php` (1,219), `CBFUtility.php` (715), `Display.php` (233), `DefaultQuestionnaires.php` (206), `JavaScriptCompressor.php` (121), `Encryption.php` (114, mcrypt).
-  - SimpleTest harness module `modules/tests` (3,019 PHP LOC) plus `lib/simpletest` (31k LOC).
-  - `ajax/getReportHTML.php` (0 bytes).
-  - Details are in `CODEBASE_MAP.md`.
-- **Impact:** Larger attack surface and audit scope, misleading UX ("Upgrade to Professional", `lib/CommonErrors.php:74-87`), and PHP-8 migration cost spent on dead code (fpdf/artichow/mcrypt).
-- **Recommendation:** Delete the listed dead files and modules after confirming with grep that nothing references them. Remove the hook call sites (ARCH-004), `License`/`LicenseUtility`, the toolbar module, `NewVersionCheck` (or point it at a GitHub releases API over HTTPS), and `wsdl/`.
-
-### ARCH-020 — Error handling by `die()`; no exception model or logging
-- **Severity:** MEDIUM
-- **Finding:** Failures terminate the request with `die()` after rendering an HTML error template, echoing internals in HTML comments (the full `$_REQUEST` for `UserInterface::fatal`). There is no logger, exception hierarchy or central error handler.
-- **Evidence:** 89 `die`/`exit` calls in `lib/*.php` + `modules/`; `lib/UserInterface.php:242-272` (echoes the full request in an HTML comment at `:259-269`); `lib/ModuleUtility.php:352-366`; `lib/DatabaseConnection.php:120-126` (prints the DB error to the browser).
-- **Impact:** Operational problems are invisible (no logs) or leak details to the client. Partial writes are left behind when `die()` fires mid-operation (no transactions on MyISAM).
-- **Recommendation:** Register `set_exception_handler`/`set_error_handler` in the shared bootstrap and log to a PSR-3 logger (Monolog is a small dependency). Replace `die()` in lib code with exceptions caught at the front controller, and remove request echoing from `UserInterface::fatal`.
-
-### ARCH-021 — Integer-offset time-zone model with SQL rewriting
-- **Severity:** MEDIUM
-- **Finding:** Time zones are integer hour offsets from a server `OFFSET_GMT` constant: no DST, no half-hour zones (commented out), and localization done by rewriting `DATE_FORMAT(` in every SELECT string.
-- **Evidence:** `config.php:180`; `constants.php:196-283`; `lib/Session.php:811` (`_timeZoneOffset = $rs['timeZone'] - OFFSET_GMT`); `lib/DatabaseConnection.php:648-712`; `index.php:54-57` (`date_default_timezone_set(date_default_timezone_get())`).
-- **Impact:** Calendar/event times are wrong by 1 hour for half of the year in DST regions and wrong for India/Iran/Australia-central zones. The query rewriter can corrupt SQL that contains `DATE_FORMAT(` with nested parentheses or commas (it splits on the first `,`).
-- **Recommendation:** Store UTC `DATETIME` values, keep an IANA zone name per site/user, convert in PHP with `DateTimeImmutable`, and delete `_localizationFilter`.
-
-### ARCH-022 — Portal shims include a file chosen from `PHP_SELF`; RSS shim is broken
-- **Severity:** MEDIUM
-- **Finding:** `careers/index.php` and `xml/index.php` include the file named by the last path segment of `$_SERVER['PHP_SELF']` after `chdir('..')`. `rss/index.php` uses `LEGACY_ROOT` before any config is loaded, so it fatals on PHP 8 (verified `Error: Undefined constant "LEGACY_ROOT"`) and on PHP 7 (warning, then the class is not found). The same `getIndexName()` value is printed unescaped into JavaScript on every page.
-- **Evidence:** `careers/index.php:36-39`; `xml/index.php:36-39`; `rss/index.php:36-38`; `lib/CATSUtility.php:304-329`; `lib/TemplateUtility.php:1195` (`CATSIndexName = "'.CATSUtility::getIndexName().'"`).
-- **Impact:** INFERENCE: with PATH_INFO enabled (Apache default for PHP handlers), `/careers/index.php/<file>.php` can make the shim include another root-level PHP file, and `/index.php/<payload>` influences the `CATSIndexName` JS string (cross-ref security audit). The advertised RSS URL `rss/` does not work.
-- **Recommendation:** In the shims, `require __DIR__ . '/../index.php';` directly. Make `getIndexName()` return a constant (`'index.php'`) or `basename($_SERVER['SCRIPT_NAME'])`, and JSON-encode it when printed into JS. Fix `rss/index.php` to include `config.php` first (or merge it with the shim pattern above).
+  - `lib/Hooks.php:52-72`; `lib/ModuleUtility.php:276-280,296`; `modules/settings/SettingsUI.php:87-128`.
+  - `lib/DataGrid.php:1206,1211,1441,1530,1912`; `lib/ModuleUtility.php:542`; `lib/QueueProcessor.php:210`; `lib/Wizard.php:75-80` → `modules/wizard/WizardUI.php:181`; `modules/install/ajax/ui.php:544,551,1162`; `modules/careers/CareersUI.php:280,285,1272`; `lib/Template.php:125`; `ajax.php:127`; `lib/ArrayUtility.php:101`.
+  - Runtime: RT-01 shows a migration executing as "eval()'d code" inside a page request.
+- **Impact:** Code is invisible to static analysis, IDEs, opcache and type checks; errors in it surface only at runtime (RT-01). Anyone able to write session data can run code (SEC-011). 241 of 251 hook points cost `eval` calls and do nothing.
+- **Severity:** HIGH — a major barrier to refactoring, analysis and PHP upgrades, with a security precondition.
+- **Recommendation:** Replace string code with ordinary callables and explicit checks, so behaviour can be analysed and the career-portal restriction no longer depends on session-stored strings.
+- **Unknown / needs further validation:** Whether any deployment adds its own hooks via modules outside this repository. Needs a survey of installations.
 
 ### ARCH-023 — Include-order coupling, include cycles and eager loading
-- **Severity:** MEDIUM
-- **Finding:** There is no autoloading for `lib/`. Files `include_once` their dependencies with paths that depend on the current directory, rely on others having loaded classes they use, and form include cycles. A static walk from `index.php` reaches 49 files / 29,276 LOC (upper bound; includes conditional includes) before any module-specific code.
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: DEBT-024, PERF-020*
+
+- **Confirmed fact:** `lib/` has no autoloading. Files `include_once` their dependencies with paths relative to the working directory, depend on include order, and form cycles. A static walk from `index.php` reaches 49 files / 29,276 LOC before any module code (upper bound; conditional includes counted); from `QueueCLI.php` 46 files / 28,668 LOC; from `ajax.php` 10 files / 4,451 LOC.
 - **Evidence:**
-  - `index.php:59-70` (comments such as `/* Depends: MRU, Users, DatabaseConnection. */`).
-  - `lib/TemplateUtility.php:39` pulls in `Candidates.php` at file scope (`Companies.php` conditionally at `:748`).
-  - Cycles: `lib/Calendar.php` ↔ `lib/JobOrders.php` (JobOrders includes Calendar `:44`; Calendar includes JobOrders); `lib/Contacts.php` ↔ `lib/Calendar.php`; `lib/Mailer.php:46` → `Pipelines` → uses `Mailer` (`Pipelines.php:371`). Evidence for the Calendar cycles: `lib/Calendar.php:44-48` includes Companies/Candidates/JobOrders/Contacts/Mailer; `lib/Companies.php:42-43`, `lib/Contacts.php:35`.
-  - `lib/ACL.php:10` `include_once("./config.php")`; `lib/Session.php:33` uses `include` (not `_once`).
-  - Most-included files: `StringUtility` (25 includers), `DateUtility` (19), `Candidates` (18).
-- **Impact:** Moving or renaming a file breaks unrelated pages. Scripts run from another working directory fail. Every request pays the parse cost of the domain layer (mitigated only if opcache is enabled; UNKNOWN in the external image).
-- **Recommendation:** Add a Composer `classmap` autoload entry for `lib/` (no code changes needed, since the classes are global), then delete the `include_once` lines incrementally. Break cycles by moving shared constants/types out of `Calendar`/`JobOrders`.
+  - `index.php:59-70` (comments such as `/* Depends: MRU, Users, DatabaseConnection. */`); `lib/TemplateUtility.php:38-39` (vendor autoload and `Candidates.php` at file scope).
+  - Cycles: `lib/Calendar.php:44-48` ↔ `lib/JobOrders.php:44`; `lib/Contacts.php:35` ↔ `Calendar`; `lib/Mailer.php:46` → `Pipelines`, which uses `Mailer` without including it (`lib/Pipelines.php:371`).
+  - Walk re-run for this edition (Python, read-only).
+- **Impact:** Moving or renaming a file breaks unrelated pages; scripts run from another directory fail; every request parses most of the domain layer. The baseline shows no measurable latency on a tiny DB (24–46 ms TTFB), so this is a change-risk issue more than a speed issue today.
+- **Severity:** MEDIUM — notable maintainability cost.
+- **Recommendation:** Load `lib/` classes through an autoloader and remove order-dependent includes, so files can be moved and tested in isolation.
+- **Unknown / needs further validation:** Whether opcache is enabled in real deployments (it affects parse cost). Needs deployment data.
 
-### ARCH-024 — Legacy frontend stack loaded globally
-- **Severity:** LOW
-- **Finding:** Every page loads jQuery 1.3.2 (2009), a custom `lib.js` and `subModal.js`, and uses XHTML Transitional table layouts with IE-specific CSS. CKEditor 4 is served from `vendor/`. One referenced validator script does not exist.
-- **Evidence:** `lib/TemplateUtility.php:1178-1216`; `js/jquery-1.3.2.min.js`; `modules/joborders/Add.tpl:2`; `composer.lock` (`ckeditor/ckeditor 4.25.1`); `modules/candidates/AddActivityChangeStatusModal.tpl:3-7`.
-- **Impact:** Known client-side vulnerabilities in old jQuery (cross-ref dependency audit), no responsive UI, and `vendor/` must be public.
-- **Recommendation:** See the UX and dependency audits. Architecturally, first introduce a per-page asset manifest so jQuery can be upgraded or removed module by module, and copy CKEditor assets to `public/assets` at build time instead of serving `vendor/`.
+### ARCH-028 — No startup or configuration validation
+*Confirmation: **Runtime** · New in this edition · Related: RT-02, RT-04, RT-08, RT-16, ARCH-014, ARCH-005*
 
-### ARCH-025 — Docker setup is development-only and not reproducible
-- **Severity:** MEDIUM
-- **Finding:**
-  - The compose stack depends on externally built images (no Dockerfile in the repo) pinned to PHP 7.2.
-  - The DB image is unpinned; the DB and phpMyAdmin (auto-login) are published.
-  - The whole repo is mounted as the docroot, the DB is seeded with test data, and there is no cron, healthcheck or TLS configuration.
-- **Evidence:** `docker/docker-compose.yml:5,14,22,27-37,39-49`; `docker/docker-compose-test.yml:5,14,27`.
-- **Impact:** No supported production deployment recipe exists. Following the compose file exposes the database through phpMyAdmin without a login. Builds are not reproducible (the image contents are UNKNOWN and could change upstream).
-- **Recommendation:**
-  - Add an in-repo `Dockerfile` (PHP 8.x-fpm + mysqli, gd, zip, soap, ldap + antiword/poppler-utils) and a production compose file without phpMyAdmin.
-  - Pin `mariadb:<version>`, mount only `public/` as docroot, and add a cron/queue service and healthchecks.
+- **Confirmed fact:** The application never checks at runtime that its database, configuration and external tools are usable. It starts against an empty database and builds part of the schema (RT-02). It ships converter paths that cannot work (`\path\to\pdftotext`) and an SMTP default (`localhost:587`, TLS, auth `user`/`password`) that fails where no relay exists; both are only discovered when a user action fails. The careers site returns an empty page with an HTML comment until enabled. Environment checks exist only in the installer and the unauthenticated `installtest.php`.
+- **Evidence:**
+  - `config.php:62-81` (placeholder converter paths), `:208-225` (mail defaults); `lib/InstallationTests.php` (installer-only checks); `modules/careers/CareersUI.php:98-103`.
+  - RT-02 (empty DB accepted, 16 tables created, 24 warnings); RT-08 / #27, #43 (`sh: \path\to\pdftotext: not found`, PDF not searchable); RT-04 / #77, #79, #85, #86 (every send is a fatal); RT-16 (careers blank until enabled, no message).
+- **Impact:** Fresh installs look healthy but lose functions silently: PDF résumés are not searchable, all e-mail paths fatal, careers is blank. Operators get no single place that reports what is misconfigured.
+- **Severity:** MEDIUM — several features are degraded by default without any diagnostic.
+- **Recommendation:** Add a runtime readiness check that validates database schema version, writable paths, converter binaries and mail settings and reports problems to administrators, so misconfiguration is visible before users hit it.
+- **Unknown / needs further validation:** Behaviour with a working SMTP relay and correct converter paths. Needs a test environment with those services.
 
 ---
 
-## Facts vs Assumptions
+## 3. Layering, state and data access
 
-**FACTS (verified in code or by running `php -l` / PHP 8.4 snippets):**
-- Everything cited with file:line above.
-- The 6 `php -l` parse failures on PHP 8.4.
-- The removed-function call sites.
-- `implode` TypeError, undefined-constant `Error`, property-on-null `Error` and mysqli exception behaviour on PHP 8.4.
-- The hook, `$_SESSION`, `getInstance` and access-check counts.
-- The absence of FULLTEXT indexes, `getenv`, `session_regenerate_id`, `mysqli_report` and prepared statements.
-- The release job not running Composer.
-- LOC and include-graph numbers (static analysis).
+**As built.** Three layers exist by convention only: `*UI` controllers → `lib/` table-gateway classes (`Candidates`, `JobOrders`, `Pipelines`, …, each constructed with a site ID) → `DatabaseConnection::getInstance()` (procedural `mysqli`). All request context lives in one serialized `CATSSession` object in `$_SESSION['CATS']`, read directly by controllers, gateways, templates and the DB wrapper. Tables are MyISAM, so the transaction API is a no-op (DB-003).
 
-**ASSUMPTIONS / INFERENCES (not verifiable statically here):**
-- PHP 7.x parses `namespace \OpenCATS\Entity;` as an expression statement (based on the PHP 7 grammar; not executed on 7.x).
-- The nginx image ignores `.htaccess`, so attachment/upload protections are ineffective in Docker.
-- PATH_INFO-based include/JS injection via `getIndexName()` depends on web-server configuration.
-- `scripts/makeBackup.php` HTTP execution depends on `register_argc_argv`.
-- MySQL ≥ 8.0.4 rejects `[[:<:]]`; MariaDB accepts it.
-- The release zip is unusable without a manual `composer install` (depends on user docs outside the repo).
-- Calendar reminders don't fire on default deployments (depends on operator cron).
-- Travis CI is inactive.
-- Committed sphinx/prod credentials were real at some point.
+### ARCH-003 — Pervasive global state: session god-object and DB singleton as service locators
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: DEBT-008, PERF-008, PERF-018, TEST-001*
 
-## Unknowns / Needs Further Investigation
+- **Confirmed fact:** `CATSSession` holds 46 private fields (user, site, access level, time zone, MRU, grid state, stored values and the password hash). Library, controller, template and DB code read it directly. The DB wrapper is a static singleton whose `getInstance()` copies the time-zone offset and date format from the session on every call. There is no dependency injection, container or request object.
+- **Evidence:**
+  - `lib/Session.php:40-87` (fields; `_password` set at `:788`); `$_SESSION` appears 127 times in 27 `lib/*.php` files and 332 times under `modules/` (`git grep -o`).
+  - `lib/DatabaseConnection.php:53-75` (`// FIXME: Remove Session tight-coupling here.` at `:62`); 110 `DatabaseConnection::getInstance()` calls; 21 static-only classes in `lib/` (`private function __construct() {}`); 44 `global`/`$GLOBALS` uses outside vendored code.
+- **Impact:** Domain code cannot be tested without a live session and database (existing unit tests cover utilities only, TEST-001). Changing the session class shape breaks live sessions. Scaling out needs shared session storage. Hidden coupling makes every refactoring risky.
+- **Severity:** HIGH — a major barrier to testing and to any structural change.
+- **Recommendation:** Build the request context once and pass it explicitly to the code that needs it, and stop keeping credentials and derived data in the session, so components can be tested and reasoned about in isolation.
+- **Unknown / needs further validation:** Session size and lock contention under real use. Needs production-size data and concurrent users.
 
-1. Contents of `opencats/php-base:7.2-fpm-alpine` and `prooph/nginx:www` (enabled extensions, opcache, nginx location rules for `attachments/`, `upload/`, `db/`, `test/`, `vendor/`, PATH_INFO handling, cron).
-2. Whether the GitHub Actions `tests` job currently passes (the Behat/integration steps and `fail_on_failure: false` hide failures); CI run history was not inspected.
-3. Runtime behaviour on PHP 8.x beyond the listed blockers (null-to-string deprecations, `count()` on non-arrays, arithmetic on non-numeric strings). This needs a PHP 8 test environment with a database; static grep cannot enumerate these exhaustively.
-4. Whether any production deployments set `CACHE_MODULES=true` (crash on PHP 8) or `ENABLE_SPHINX=true`.
-5. Real-world effect of the `_localizationFilter` rewriting on complex queries with nested `DATE_FORMAT(`.
-6. Whether `ckeditor/ckeditor 4.25.1` (locked) is an LTS build requiring a commercial license key; the dependency audit should confirm.
-7. Whether the `lib/sphinx/conf/sphinx.conf` and `scripts/mysql_get_prod_db.sh` credentials were ever valid (git history not examined).
-8. Frequency and impact of per-session module discovery under real traffic (requires profiling).
+### ARCH-009 — Database errors are not detected (PHP 7.2) or become uncaught exceptions (PHP ≥ 8.1)
+*Confirmation: **Runtime** · Phase 0 severity: unchanged · Related: DB-002, DB-023, ARCH-005, ARCH-020, RT-02*
+
+- **Confirmed fact:** `DatabaseConnection::query()` detects errors by testing `isset($this->_queryResult->connect_errno)`. `mysqli_query()` returns `false` or a `mysqli_result`, neither of which has that property, so both error branches are unreachable: on PHP 7.2 failed queries return `false` silently and callers continue. The code never calls `mysqli_report()`; on PHP 8.1+ the default report mode is `MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT`, so every SQL error becomes an uncaught `mysqli_sql_exception` and the friendly error branches are bypassed.
+- **Evidence:**
+  - `lib/DatabaseConnection.php:159-223` (checks at `:184` and `:198`); no `mysqli_report` in the repository (`git grep`).
+  - PHP 8.4: `(new mysqli_driver)->report_mode` is `3`.
+  - RT-02: SELECTs on a missing table returned `false`; the code continued and printed 23 `mysqli_fetch_assoc() expects parameter 1 to be mysqli_result, boolean given` warnings instead of an error (`evidence/empty-db-before-seed/first-request.html`).
+  - `lib/ModuleUtility.php:554-569` records a migration step as applied whatever the result.
+- **Impact:** Failed writes look successful to users on PHP 7.2, and failed migrations are recorded as done. On PHP 8.1+ the same failures become fatal pages. Behaviour differs completely between PHP versions.
+- **Severity:** HIGH — silent data-integrity risk on the supported runtime.
+- **Recommendation:** Make the DB layer detect and surface every failed statement in one consistent way, so callers and operators see errors instead of false success.
+- **Unknown / needs further validation:** How often writes fail silently in production. Needs server-side query error logging on a real installation.
+
+### ARCH-010 — Data layer: hand-built SQL in table gateways that also emit HTML and read the session
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: DB-010, SEC-016, DEBT-021*
+
+- **Confirmed fact:** Persistence uses `sprintf` SQL templates with values passed through escape helpers (`makeQueryString`, `makeQueryInteger`, …). No prepared statements exist in `lib/`, `modules/` or `src/`. Gateway classes also hold presentation code: DataGrid column definitions are HTML-producing PHP strings evaluated per cell. Gateways create each other with `include_once` and `new` inside methods.
+- **Evidence:**
+  - `lib/DatabaseConnection.php:480-498` (`// FIXME: Security issue, this function is not enough for sanitizing` at `:482`); `git grep` for `prepare(`/`bind_param` returns nothing.
+  - `lib/Candidates.php:1943,1992,2001` (HTML in `pagerRender`), evaluated in `lib/DataGrid.php:1530,1912`; 82 `pagerRender` definitions.
+  - `lib/JobOrders.php:103,240,254,318` (creates `Contacts`, `History`, `Mailer`, `Attachments`); direct SQL also in `modules/install/Schema.php`, `modules/import/Import.php` and several `dataGrids.php`.
+- **Impact:** SQL safety depends on every developer choosing the right helper for every value. Business rules cannot be reused outside the web UI or tested without a database.
+- **Severity:** MEDIUM — notable maintainability and safety cost; concrete injection points are rated in DB-010/SEC-016.
+- **Recommendation:** Move to parameterised queries and keep HTML out of data classes, so query safety no longer depends on per-call discipline and data access can be tested on its own.
+- **Unknown / needs further validation:** None.
+
+### ARCH-011 — God classes and god methods
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: DEBT-006*
+
+- **Confirmed fact:** A few files hold most of the logic, with large hand-written dispatchers and long positional parameter lists.
+
+  | File | LOC | `case` actions in `handleRequest()` |
+  |---|---|---|
+  | `modules/settings/SettingsUI.php` | 3,842 | 51 |
+  | `modules/candidates/CandidatesUI.php` | 3,582 | 32 |
+  | `lib/DataGrid.php` | 2,649 | — |
+  | `lib/Candidates.php` | 2,473 (3 classes) | — |
+  | `modules/import/ImportUI.php` | 2,104 | — |
+  | `lib/Search.php` | 2,096 (9 classes) | — |
+  | `modules/joborders/JobOrdersUI.php` | 1,972 | — |
+  | `modules/careers/CareersUI.php` | 1,794 | — |
+
+- **Evidence:** `wc -l`; `awk` over `handleRequest()`; `Candidates::add()` takes 29 positional parameters and `Candidates::update()` 32 (`lib/Candidates.php:94-99`, `:249-254`). The misaligned `update()` call in the careers portal (API-003) is a direct result.
+- **Impact:** High change risk, merge conflicts, slow review and onboarding; argument-order bugs are easy to make and hard to see.
+- **Severity:** MEDIUM — notable maintainability cost.
+- **Recommendation:** Split the largest controllers by sub-area and replace long positional parameter lists with named structures, so changes are local and argument mistakes are caught.
+- **Unknown / needs further validation:** None.
+
+### ARCH-027 — Multi-step workflows have no transaction or outbox; a late failure leaves partial writes
+*Confirmation: **Runtime** · New in this edition · Related: RT-04, DB-003, API-011, PERF-005, ARCH-020*
+
+- **Confirmed fact:** Business workflows write several tables and then call external services (SMTP) synchronously in the same request, with no transaction (all tables are MyISAM; `beginTransaction()` ignores errors by design) and no queue or outbox. When a late step throws, earlier writes stay and later steps never run.
+- **Evidence:**
+  - Careers apply, `modules/careers/CareersUI.php:1190-1600`: candidate add/update (`:1279-1304`), questionnaire (`:1345`), attachment (`:1354`), pipeline (`:1414`), activity (`:1463`), then e-mails (`:1518`, `:1585`, `:1595`).
+  - RT-04 / #85, #86: the SMTP exception reached the applicant as a fatal page after the candidate, pipeline row (status 100) and activity were saved; the owner notification did not run and `email_history` stayed empty.
+  - Status change: `lib/Pipelines.php:334-347` (UPDATE), `:350-365` (history), `:367-377` (mail); the caller then adjusts job-order openings and schedules an event (`modules/candidates/CandidatesUI.php:3084-3100`, `:3223`), which are skipped if the mail throws (static reading).
+  - `lib/DatabaseConnection.php:718-731` (`BEGIN` sent with errors ignored); DB-003 (all 55 tables MyISAM).
+- **Impact:** A mail outage leaves records half-processed (e.g. status "Placed" without the openings update) and shows applicants an error after their application was stored, which invites duplicate submissions. There is no retry for the failed side effect.
+- **Severity:** HIGH — data-integrity risk in core recruiting workflows, triggered by a common failure.
+- **Recommendation:** Make each workflow's writes atomic and move external side effects out of the request path with retry, so a mail or network failure cannot leave partial state or abort the user's action.
+- **Unknown / needs further validation:** Behaviour with a reachable but failing SMTP relay (e.g. rejected recipient). Needs a controlled SMTP test server.
+
+---
+
+## 4. Authorization and presentation
+
+**As built.** Authentication is a per-module flag (`_authenticationRequired`); eight modules are public (`careers`, `graphs`, `install`, `login`, `rss`, `toolbar`, `wizard`, `xml`). Authorization is written inline in each action: `if ($this->getUserAccessLevel('candidates.show') < ACCESS_LEVEL_READ) …`. Access levels are integers (`constants.php:74-82`); the fine-grained `ACL_SETUP` map exists only as a commented example in `config.php:343-368`, so `ACL::getAccessLevel()` returns the user's global level (`lib/ACL.php:52-56`). Templates are PHP files included by `Template::display()` (`lib/Template.php:98-129`); `$this->_()` escapes, `echo` does not.
+
+### ARCH-007 — Authorization is opt-in per action with no central policy
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-026, API-005, SEC-013, TEST-004*
+
+- **Confirmed fact:** Each module decides authorization inside its own `switch`. Some modules have no access-level checks at all; AJAX handlers only check that a session is logged in; the fine-grained ACL is inert by default; and the `careerportal` user category is restricted only by eval'd hooks (ARCH-004). Those hooks cover the dispatchers of seven modules (activity, calendar, candidates, companies, contacts, job orders, reports) plus home, profile and tab visibility; `lists`, `import`, `export`, `attachments`, `graphs`, `tests` and every AJAX handler have no such restriction.
+- **Evidence:**
+  - `modules/candidates/CandidatesUI.php:89-92` (typical inline check); no access-level references in `modules/reports/ReportsUI.php`, `modules/export/ExportUI.php`, `modules/activity/ActivityUI.php`, `modules/home/HomeUI.php` (`grep`).
+  - `lib/AJAXInterface.php:202-222`, `:251-260` (login check only); 4 of 32 AJAX handlers check an access level (API §2).
+  - `lib/ACL.php:52-56`; `config.php:343-368` (commented `ACL_SETUP`); `modules/settings/SettingsUI.php:87-128`.
+  - The baseline used only the administrator account (`SMOKE_TEST.md` §4), so permission differences were not exercised.
+- **Impact:** Every new action is a potential privilege bug; the real permission model can only be learned by reading about 10k lines of switch statements. Concrete gaps are listed in SEC-026/API-005.
+- **Severity:** HIGH — the design makes authorization gaps likely and hard to audit.
+- **Recommendation:** Declare required access per action and per AJAX handler in one place and enforce it before the handler runs, denying by default, so coverage can be reviewed and tested.
+- **Unknown / needs further validation:** Actual behaviour for READ/EDIT/"sourcer"/"careerportal" users. Needs authorized role-based testing on an isolated instance.
+
+### ARCH-008 — Raw-PHP templates with opt-in escaping; mixed storage encoding
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: SEC-005, DB-014, API-012, API-015*
+
+- **Confirmed fact:** Templates are full PHP (they read `$_SESSION`, call static services and include the Composer autoloader). Escaping requires `$this->_()`; helper classes echo concatenated HTML. Storage encoding is mixed: most recruiter add/edit handlers and the careers portal HTML-encode input with `getSanitisedInput()` before saving (`htmlspecialchars(…, ENT_QUOTES)`), migration `'362'` HTML-encoded all job-order descriptions and notes, while other writers (AJAX handlers, imports, some fields such as EEO values and `source` on add) store raw text.
+- **Evidence:**
+  - `lib/Template.php:51-54`, `:64-67`, `:98-129`; `modules/candidates/Show.tpl:2-4`.
+  - Across 136 templates: 892 `$this->_(` calls vs 429 `echo $this->…` and 15 `<?= $this->…` raw outputs (`git grep -o`; not every raw output is unsafe).
+  - `lib/UserInterface.php:388-392`; `getSanitisedInput` call counts: CandidatesUI 44, ContactsUI 38, CompaniesUI 29, CareersUI 22, JobOrdersUI 14, SettingsUI 8, CalendarUI 7; `modules/candidates/CandidatesUI.php:902-926` (mostly sanitised, EEO/`source` raw).
+  - `modules/install/Schema.php:1296-1322` (`'362'`); `lib/XmlJobExport.php:218` encodes again for feeds (double encoding, API-012).
+- **Impact:** No single output rule is correct: some values are escaped twice (visible entities), others not at all (XSS, SEC-005). Any move to an auto-escaping view layer first needs the stored data normalised.
+- **Severity:** HIGH — systemic XSS exposure and a data-normalisation prerequisite for any view change.
+- **Recommendation:** Adopt one rule — store raw text, escape on output — and record which stored fields are already encoded, so output escaping can be made automatic without double encoding.
+- **Unknown / needs further validation:** How much stored production data is encoded vs raw. Needs a read-only scan of a real database.
+
+### ARCH-024 — Legacy front-end stack loaded globally; editor does not start; not responsive
+*Confirmation: **Runtime** · Phase 0 severity: LOW → now MEDIUM (runtime shows broken rich-text editing and a non-responsive layout) · Related: RT-07, RT-13, RT-14, DEP-002, DEP-003, UX findings*
+
+- **Confirmed fact:** Every page loads jQuery 1.3.2 (2009), a custom `lib.js` and `subModal.js` (iframe pop-ups via `showPopWin`) and uses XHTML 1.0 Transitional table layouts with IE-conditional CSS. CKEditor 4 is served from `vendor/`, so `vendor/` must be web-served. One referenced script, `modules/contacts/activityvalidator.js`, does not exist (the candidates counterpart does).
+- **Evidence:**
+  - `lib/TemplateUtility.php:1178-1216` (`:1193-1194` subModal and jQuery); `modules/joborders/Add.tpl:2`, `modules/candidates/SendEmail.tpl:2` (CKEditor from `vendor/`); `modules/contacts/AddActivityScheduleEventModal.tpl:4,6` (missing file).
+  - RT-07 (#19, #78): locked CKEditor 4.25.1 refuses to start without a licence key; fields stay plain textareas.
+  - RT-14 (#92, #93, S4–S6): recruiter pages stay 978 px wide at a 390 px viewport; header overlaps.
+  - RT-13 (#03): two missing images on the forgot-password page.
+- **Impact:** Rich-text editing is unavailable; phones are not usable; old client libraries carry known vulnerabilities (DEP-003).
+- **Severity:** MEDIUM — degraded features on every editor page and on mobile.
+- **Recommendation:** Stop loading one global legacy bundle on every page and serve third-party assets from a controlled public path, so front-end libraries can be upgraded page by page (details in the UX and dependency assessments).
+- **Unknown / needs further validation:** Whether the contacts activity pop-up fails without its validator script (not opened in the baseline). Needs a UI check of that pop-up.
+
+---
+
+## 5. Configuration, errors and operations
+
+**As built.** Configuration is `config.php` (500 lines, 82 `define()`s, tracked in git) plus `constants.php`, plus per-site rows in the `settings` table (types MAILER / CALENDAR / EEO / CAREER_PORTAL, some values PHP-`serialize`d). There is no environment-variable support. Errors end the request with `die()` after an HTML error page. Background work is a DB-backed queue run by `QueueCLI.php`, which is expected to be called by cron. Details in Reference R6–R7.
+
+### ARCH-014 — Configuration is tracked, mutable PHP source rewritten at runtime; no environment support
+*Confirmation: **Partial** · Phase 0 severity: unchanged · Related: SEC-018, SEC-010, DEBT-011, RT-04, RT-08, ARCH-028*
+
+- **Confirmed fact:** `config.php` is tracked and holds a licence key, DB credentials (`cats`/`password`/`cats_dev`), tester/demo logins, SMTP and LDAP credentials and feature flags. `getenv`/`$_ENV` are not used anywhere. `CATSUtility::changeConfigSetting()` rewrites `config.php` by line prefix and writes the value as raw PHP; the installer passes request values straight into it (`"'" . $_REQUEST['user'] . "'"`), and the settings module, the footer and migrations write it too. Copies of the config have drifted.
+- **Evidence:**
+  - `config.php:31`, `:40-43`, `:188-197`, `:219-225`, `:273`; `lib/CATSUtility.php:142-181`.
+  - Writers: `modules/install/ajax/ui.php:120-135`, `:224-237`, `:410-422`, `:524`, `:696`, `:758`, `:782`; `modules/settings/SettingsUI.php:2727`, `:3124`; `lib/TemplateUtility.php:842-848`; `modules/install/Schema.php:859,863`; `modules/install/OptionalComponents.php:35,39`.
+  - Drift: `test/config.php` lacks `LDAP_ACCOUNT`, `LDAP_AD`, `LDAP_ATTRIBUTE_*`, `LDAP_SITEID` and adds `LDAP_UID`; `optional-updates/latest-sphinx-search/config.php` lacks `LEGACY_ROOT`, `AUTH_MODE` and all LDAP constants (`grep`).
+  - Runtime: the baseline could not use the web installer without letting it rewrite `config.php`, so it replayed only the DB steps and kept `config.php` read-only; `changeConfigSetting()` then returns `false` silently (`ENVIRONMENT.md` §3 E6–E7, `INSTALLATION.md` §3). Committed defaults caused RT-04 (SMTP) and RT-08 (converter paths).
+  - Not exercised: the installer's config writes themselves.
+- **Impact:** The web server needs write access to executable code. A quote in installer input corrupts or injects into `config.php` (SEC-010). Container and multi-environment deployment requires editing tracked code. Committed secrets must be treated as public.
+- **Severity:** HIGH — writable executable configuration fed from request data, and no safe way to configure per environment.
+- **Recommendation:** Separate tracked defaults from per-installation settings, read secrets from the environment or a non-executable file, and stop writing PHP source at runtime, so the code base can be deployed read-only.
+- **Unknown / needs further validation:** Whether real installations keep `config.php` writable after install. Needs deployment data.
+
+### ARCH-020 — No error model: `die()` pages, no handler, no logging; fatals served as HTTP 200
+*Confirmation: **Runtime** · Phase 0 severity: MEDIUM → now HIGH (runtime shows fatals with stack traces reaching applicants as HTTP 200, and core e-mail paths failing) · Related: RT-03, RT-04, RT-05, RT-06, RT-15, SEC-012, ARCH-027*
+
+- **Confirmed fact:** The application registers no error or exception handler and has no logging facility; the only `set_error_handler` is local to `modules/install/backupDB.php:68`. Failures call `die()` after rendering an error template; `UserInterface::fatal()` echoes the whole `$_REQUEST` into an HTML comment, and the DB connect error prints the MySQL error. Uncaught exceptions and PHP errors are left to `display_errors`.
+- **Evidence:**
+  - 112 `die(`/`exit(` calls in `lib/*.php` and `modules/` (`git grep`); `lib/UserInterface.php:242-272` (request echo at `:260`); `lib/DatabaseConnection.php:115-140`; `lib/CommonErrors.php:68+`.
+  - RT-15: every fatal in the final run was served with HTTP 200 (nginx log: 195 × 200, 11 × 302, no 5xx) and the body contained stack traces with server paths and call arguments.
+  - RT-03 (#04) `Users::getPassword()` fatal; RT-04 (#77, #79, #85, #86) uncaught PHPMailer exception, shown to the careers applicant; RT-05 (#88) RSS fatal; RT-06 warnings rendered in the company page.
+- **Impact:** Monitoring cannot see failures (all 200). Applicants and users see raw PHP output with internals. Operators have no log beyond whatever `php.ini` provides. Behaviour depends on host `display_errors` settings.
+- **Severity:** HIGH — failures are invisible to operations and leak internals on the public site.
+- **Recommendation:** Handle all errors in one place so users get a clean error page with a correct status code and operators get a server-side log entry, instead of `die()` pages and displayed stack traces.
+- **Unknown / needs further validation:** Behaviour with `display_errors=Off` (typical production); the error pages would then be blank. Needs a run with production PHP settings.
+
+### ARCH-021 — Time zones are integer GMT offsets applied by rewriting SQL text
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: DB-020*
+
+- **Confirmed fact:** Time zones are integer hour offsets relative to the server constant `OFFSET_GMT`; there is no DST handling and fractional zones are commented out. Every `SELECT` containing `DATE_FORMAT(` is rewritten by string manipulation to add or subtract hours; the rewriter splits on the first comma.
+- **Evidence:** `config.php:180`; `constants.php:196-283` (`// FIXME: Support fractional GMT offsets.`); `lib/Session.php:607`, `:811`; `lib/DatabaseConnection.php:648-712`; `index.php:54-57`.
+- **Impact:** Event and activity times are off by one hour for part of the year in DST regions and wrong for half-hour zones; nested `DATE_FORMAT(` expressions can be corrupted.
+- **Severity:** MEDIUM — incorrect times for many users; limited data damage.
+- **Recommendation:** Store times in one reference zone and convert per user with real zone names in application code, so DST and fractional zones are correct and SQL is not rewritten.
+- **Unknown / needs further validation:** Real-world impact on stored calendar data. Needs production data from DST regions.
+
+### ARCH-016 — Background work depends on an unprovisioned cron calling a web-reachable script
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: API-018 (merged here), PERF-017, SEC-028*
+
+- **Confirmed fact:** Calendar reminders and queue clean-up run only when something executes `QueueCLI.php`. Nothing in the repository provisions a cron job, and the script has no CLI guard. Each run includes every `modules/*/tasks/tasks.php`, which immediately runs due recurring tasks, then processes one queued task. The UI offers reminder e-mails only if `queue.time` in the web root is less than five minutes old. The framework has defects: duplicate diverging files, recurring tasks stored by name while the runner expects a path, a duplicated `case TASKRET_SUCCESS` (the `SUCCESS_NOLOG` label is unreachable) and a `print_r` of a void return.
+- **Evidence:**
+  - `QueueCLI.php:26-29` (header: "should be called by cron … (not the website)"), `:78-86`, `:115-118`; `lib/ModuleUtility.php:86-101`.
+  - `lib/QueueProcessor.php:126-158` (`:156` stores the name), `:201-226` (path expected), `:210` (`eval`), `:493-525`; `lib/SystemUtility.php:85-88`; `modules/calendar/CalendarUI.php:256-263`.
+  - Duplicates: `modules/queue/tasks.php:41` (never loaded) vs `modules/queue/tasks/tasks.php:39`; `modules/queue/lib/Task.php` vs `modules/queue/tasks/lib/Task.php`.
+  - No cron in `docker/*.yml`, CI or docs; the baseline environment ran no scheduler (`ENVIRONMENT.md` §2), so the queue was not exercised.
+- **Impact:** Reminder e-mails silently never go out on default deployments and the option is hidden without explanation. Anyone who can reach the script over HTTP can trigger task runs.
+- **Severity:** MEDIUM — a feature silently absent by default, plus an unguarded trigger.
+- **Recommendation:** Document and ship the scheduler as part of the deployment, make the runner CLI-only, and remove the duplicate task files, so background work is reliable and cannot be triggered by visitors.
+- **Unknown / needs further validation:** Whether any installation runs `QueueCLI.php` under cron (check the age of `queue.time`). Needs field data.
+
+---
+
+## 6. Storage, search and integrations
+
+**As built.** Attachments are stored under the web root at `attachments/site_<id>/<n>xxx/<md5>/<file>`; text is extracted by `exec()` of external converters (antiword, pdftotext, html2text) or in PHP (RTF, DOCX, ODT) and stored in `attachment.text` for search. Search uses `LIKE` and `REGEXP` over MyISAM tables; Sphinx is optional. External integrations (SMTP, LDAP, Google geocoding, Resfly SOAP, catsone.com version check, job-board XML) are assessed in `API_AUDIT.md` §5.
+
+### ARCH-018 — File storage inside the web root; protection relies on Apache `.htaccess`; converters broken by default
+*Confirmation: **Runtime** · Phase 0 severity: MEDIUM → now HIGH (runtime shows candidate files downloadable without a session in the project's own topology) · Related: RT-17, RT-08, SEC-008, SEC-009, SEC-020, DB-011*
+
+- **Confirmed fact:** Attachments, uploads, temp files, backups, `modules.cache` and `queue.time` are written under the document root. Directories are created and chmod'ed `0777`. Protection is Apache-only: `attachments/.htaccess` and `upload/.htaccess` disable script execution but explicitly grant direct access to document and image extensions, so even on Apache files are meant to be reachable by URL. The careers portal writes the raw file path into activity notes. Converter paths default to Windows-style placeholders. ODT extraction passes an undefined variable (`$filename` instead of `$fileName`) and always fails.
+- **Evidence:**
+  - `lib/Attachments.php:1282-1382` (`0777` at `:1288,1299,1313,1349,1364,1382`); `lib/FileUtility.php:479,488`; `attachments/.htaccess`, `upload/.htaccess`; `modules/careers/CareersUI.php:1447`.
+  - `config.php:62-81`; `lib/DocumentToText.php:72` vs `:166`, `:362` (Windows COM), `:378` (`exec`), `:417` (`LIBXML_NOENT | LIBXML_XINCLUDE`, SEC concern).
+  - RT-17: an unauthenticated `GET /attachments/site_1/0xxx/<hash>/resume_alex.txt` returned the file under nginx, which ignores `.htaccess`.
+  - RT-08 (#27, #43): `sh: \path\to\pdftotext: not found`; PDF text not stored, PDF résumés not searchable. TXT and DOCX extraction work (#42, #44, #87).
+- **Impact:** Candidate résumés (PII) are reachable without a session by anyone who obtains the path, which the app itself prints into notes. Security depends on the web server honouring Apache files. PDF and ODT résumés are silently excluded from search by default.
+- **Severity:** HIGH — exposure of candidate PII with a modest precondition (knowing the path), in the project's own deployment setup.
+- **Recommendation:** Keep stored files outside the document root and serve them only through an access-checked download path, and ship working converter defaults, so file access no longer depends on web-server-specific rules and all résumé formats are indexed.
+- **Unknown / needs further validation:** How attachment paths leak in practice (notes, e-mails, logs, referrers). Needs authorized security testing on an isolated instance.
+
+### ARCH-017 — Search is REGEXP/LIKE scanning; Sphinx integration is a 2007 client and a forked file
+*Confirmation: **Partial** · Phase 0 severity: unchanged · Related: PERF-001, PERF-002, DB-021, DEP-006, ARCH-M03*
+
+- **Confirmed fact:** No FULLTEXT index exists (all 55 tables MyISAM). Boolean résumé and key-skill search compiles to nested `REGEXP '[[:<:]]word[[:>:]]'` predicates; quick search uses leading-wildcard `LIKE` over `CONCAT`/`REPLACE` expressions. Optional Sphinx uses a 2007 client API; `optional-updates/latest-sphinx-search/` ships a forked `Search.php` that uses `create_function` (removed in PHP 8).
+- **Evidence:**
+  - `lib/DatabaseSearch.php:214-425` (`:360-363`); `lib/Search.php:1358-1376`, `:1866-1900`; `grep -ci fulltext db/cats_schema.sql` → 0; `lib/sphinx/sphinxapi.php` (`$Id … 2007-04-27`); `optional-updates/latest-sphinx-search/Search.php:228,240,301,313`.
+  - Runtime (tiny data set): quick search, candidate/company/contact/job-order search and résumé keyword search for TXT/DOCX all work on MariaDB 10.7 (#38–#48).
+  - Inferred, not tested: scan cost at scale; MySQL ≥ 8.0.4 rejects the `[[:<:]]` word-boundary syntax (external knowledge).
+- **Impact:** Search cost grows linearly with résumé volume and takes table locks on MyISAM. Boolean résumé search would likely fail on MySQL 8.
+- **Severity:** MEDIUM — works today on small data and MariaDB; scaling and portability are at risk.
+- **Recommendation:** Back text search with an index-supported mechanism and keep one maintained search implementation, so cost does not grow with every résumé and the code runs on current MySQL.
+- **Unknown / needs further validation:** Response times at production volume, and behaviour on MySQL 8. Needs production-size data and a MySQL 8 test instance.
+
+---
+
+## 7. Platform compatibility and build
+
+**As built.** The baseline ran on PHP 7.2.16 (EOL since November 2020) with Composer-installed PHPMailer 6.8.0 and CKEditor 4.25.1 (`ENVIRONMENT.md` §2). CI tests PHP 7.2 only. The full PHP 8.4 lint and grep results are in Reference R5.
+
+### ARCH-001 — Application cannot run on any supported PHP version; stack pinned to EOL PHP 7.2
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: API-019 (merged here), DEP-001, DEBT-001, TEST-002, TEST-003*
+
+- **Confirmed fact:** `lib/CATSUtility.php`, included by `index.php:61`, `ajax.php:41`, `QueueCLI.php:40` and the portal shims, does not parse on PHP 8 (curly-brace string offsets at `:108` and `:122`), so every entry point dies at include time. Behind it, `get_magic_quotes_runtime()`/`get_magic_quotes_gpc()` (removed in 8.0) are called at `index.php:93,99`, `ajax.php:50,56`, `QueueCLI.php:59,65`; the legacy `implode($array, $glue)` order in `DataGrid::_getData()` throws `TypeError` (every list page); vendored FPDF and Artichow do not parse (PDF reports, all graphs). CI, Docker and PHPUnit 7.5 are pinned to PHP 7; the installer only requires PHP ≥ 5.0.0 and does not warn on PHP 8.
+- **Evidence:**
+  - `php -l` (PHP 8.4.19) over 491 files: 6 parse failures — `lib/CATSUtility.php:108`, `lib/fpdf/fpdf.php:434`, `lib/fpdf/font/makefont/makefont.php:18`, `lib/artichow/AntiSpam.class.php:63`, `src/OpenCATS/Entity/JobOrderRepositoryException.php:2`, and an intentional SimpleTest fixture.
+  - PHP 8.4: `function_exists('get_magic_quotes_gpc')` → `false`; `implode(array('a'), ',')` → `TypeError`; `lib/DataGrid.php:1292,1299,1328,1329`.
+  - `.github/workflows/ci.yml:21` (`php-version: ['7.2']`); `docker/docker-compose.yml:14`; `composer.json` (`phpunit/phpunit ^7.5.7`, no `php` constraint); `lib/InstallationTests.php:164`.
+  - Runtime: the baseline ran only on PHP 7.2.16; PHP 8 was not run.
+- **Impact:** Operators must run an end-of-life PHP with no security fixes. Hosts that offer only PHP 8.x cannot run OpenCATS at all.
+- **Severity:** CRITICAL — the system cannot run on any supported PHP platform.
+- **Recommendation:** Remove the PHP-8-incompatible constructs listed in Reference R5 and test on a supported PHP version in CI, so the application can run on a maintained runtime.
+- **Unknown / needs further validation:** Further PHP 8 runtime breakages hidden behind the first fatal (null-to-string, `count()` on non-arrays; RT-06 already shows `count()` warnings on 7.2 that become `TypeError` on 8). Needs a PHP 8 test environment with a database.
+
+### ARCH-002 — Release artifact omits `vendor/` although the runtime hard-requires it; CI lints only `src/`
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: DEP-004, TEST-003*
+
+- **Confirmed fact:** The GitHub `release` job zips the checkout without running Composer, and `vendor/` is git-ignored. Runtime code unconditionally loads `./vendor/autoload.php` (with `require` in `Mailer.php`) and serves CKEditor from `vendor/`. The CI lint step covers only `src/` (24 of 355 PHP files).
+- **Evidence:** `.github/workflows/ci.yml:106-119` (zip at `:119`, no Composer step), `:44` (lint); `.gitignore` (`vendor/*`, `/vendor/`); `lib/TemplateUtility.php:38`, `lib/Companies.php:2`, `lib/JobOrders.php:2`, `lib/Mailer.php:43`, `modules/*/Show.tpl:2-3`, `modules/joborders/Add.tpl:2`. The baseline had to run `composer install --no-dev` before the app would start (`INSTALLATION.md` §1 step 2).
+- **Impact:** A release zip used as-is fails with a missing-file fatal on the first page (inferred; the release job was not run). PHP-version regressions in `lib/` and `modules/` pass CI.
+- **Severity:** HIGH — the official release artifact is not runnable without undocumented steps.
+- **Recommendation:** Make the release artifact self-contained and lint all PHP and template files in CI, so what is published runs and parse errors are caught before release.
+- **Unknown / needs further validation:** Whether published release zips were ever tested by users. Needs the release download history or a test of a published artifact.
+
+---
+
+## 8. Legacy layers: `src/OpenCATS`, multi-site and licensing remnants
+
+**As built.** Three unfinished or abandoned structures sit inside the running code: a small PSR-4 layer (`src/OpenCATS`, Composer autoload), the multi-tenant (`site_id`) model from hosted CATS, and the licensing/"Professional" machinery of the commercial CATS product.
+
+### ARCH-012 — `src/OpenCATS` PSR-4 layer is stalled and partly broken
+*Confirmation: **Partial** · Phase 0 severity: unchanged · Related: DEBT-009*
+
+- **Confirmed fact:** `src/OpenCATS` has 24 files / 3,903 LOC: 6 `Entity` files (Company and JobOrder entities, repositories, exceptions), 3 `UI` quick-action-menu classes and 15 test files. Only `Companies::add()` and `JobOrders::add()` use the repositories; the menus are built in four `Show.tpl` files and `TemplateUtility`. Repositories take the legacy `DatabaseConnection` and build SQL the same way as `lib/`. `JobOrderRepositoryException.php` does not parse on PHP 8 (`namespace \OpenCATS\Entity;`), and `lib/Companies.php:109` catches `CompanyRepositoryException` without importing it, so that catch never matches.
+- **Evidence:**
+  - `lib/Companies.php:2-4`, `:105-112`; `lib/JobOrders.php:2-6`, `:106-136`; `lib/TemplateUtility.php:43`, `:1140`; `modules/{candidates,companies,contacts,joborders}/Show.tpl:2-4`; `src/OpenCATS/Entity/JobOrderRepositoryException.php:2`; `src/OpenCATS/UI/QuickActionMenu.php:13,22,28`.
+  - Runtime: adding a company (#10) and a job order (#19) succeeded, i.e. the repository happy path works on PHP 7.2; the error paths were not exercised.
+- **Impact:** Two conventions coexist without a direction; an insert failure for companies or job orders becomes a fatal instead of a handled error.
+- **Severity:** MEDIUM — maintainability cost and two latent error-path fatals.
+- **Recommendation:** Fix the broken namespace and import, and record whether `src/` is the intended home for new code, so contributors do not extend two patterns at once.
+- **Unknown / needs further validation:** How PHP 7.2 treats `namespace \OpenCATS\Entity;` when the file is autoloaded (expected: an "undefined constant" error). Needs a PHP 7.2 check of the error path.
+
+### ARCH-013 — Multi-site (`site_id`) model is vestigial
+*Confirmation: **Static** · Phase 0 severity: unchanged · Related: DB-012, SEC-008, API-012*
+
+- **Confirmed fact:** 36 of 55 tables carry `site_id`, and gateways are constructed with the session's site ID (about 320 `site_id = %s` predicates, 901 `_siteID` references). But the careers, RSS and XML portals always serve `Site::getFirstSiteID()` (lowest non-admin site); the per-site override is an unimplemented hook. Attachment download builds its WHERE clause with `|| true`, bypassing the site filter, and relies on an MD5 of the directory name. Hosted-service branches remain: login `&s=<unixName>`, a special `CATS_ADMIN_SITE = 180`, hard-coded `'cognizo'` and site `200` exceptions ("TODO: Remove me"), an unused `transparentLogin()`, a `demo.catsone.com` redirect.
+- **Evidence:** `awk` over `db/cats_schema.sql` (36 tables with `site_id`); `lib/Site.php:161-182`; `modules/careers/CareersUI.php:79,81`, `modules/rss/RssUI.php:103,105`, `modules/xml/XmlUI.php:107,109`; `modules/attachments/AttachmentsUI.php:83-86`, `lib/Attachments.php:595-605`; `constants.php:187`; `lib/Session.php:200-212`, `:939`; `index.php:246-250`; `db/cats_schema.sql:858` (`extension-statistics` module row).
+- **Impact:** The code carries multi-tenant complexity without end-to-end support; a second site gets no careers page or feeds, and tenant isolation cannot be relied on.
+- **Severity:** MEDIUM — complexity and a latent isolation gap; single-site installs work (baseline).
+- **Recommendation:** Decide whether the product is single-site or multi-site and make the code consistent with that decision, so isolation is either enforced everywhere or the unused machinery is removed.
+- **Unknown / needs further validation:** Whether any installation runs more than one site. Needs field data.
+
+### ARCH-019 — Hosted-CATS / "Professional" remnants are still loaded and still change behaviour
+*Confirmation: **Partial** · Phase 0 severity: unchanged · Related: DEBT-015, API-009, API-010, SEC-017, ARCH-M01*
+
+- **Confirmed fact:** Licence checks are hard-wired to `true` (`LicenseUtility::isProfessional()`, `validateProfessionalKey()`, `isParsingEnabled()`), which switches on Professional-only paths: the Resfly parsing UI, the Firefox-toolbar module, and a footer routine that may rewrite `LICENSE_KEY` in `config.php` on about 1 in 11 page views (a no-op today because validation returns `true`). A version check can phone home to `www.catsone.com:80` with the site name and licence key (off only because the seeded `system` row disables it). 241 of 251 hook names are unimplemented hosted-CATS extension points. Seven `lib/` files (4,181 LOC) have no references (CODEBASE_MAP §8).
+- **Evidence:**
+  - `lib/License.php:580-591`, `:658-706`; `lib/TemplateUtility.php:842-848`; `modules/toolbar/ToolbarUI.php:114`; `lib/NewVersionCheck.php:76`, `:100-122`, `:198-224`; `db/cats_schema.sql:1038-1044`; `lib/CommonErrors.php:74-88` ("Upgrade to Professional").
+  - Runtime: with `PARSING_ENABLED=false`, the add-candidate page still renders the parser layout ("Manually enter information / OR import resume", step #22), showing that `isParsingEnabled()` returned `true`. The SOAP call itself was not exercised.
+- **Impact:** Dead features look live (parsing, toolbar), attack surface and PHP-upgrade scope are larger than the product, and a phone-home path exists for any database missing the seeded row.
+- **Severity:** MEDIUM — misleading behaviour and wasted scope; no core workflow broken.
+- **Recommendation:** Remove or explicitly disable the commercial and hosted-service paths, so the code base matches the open-source product and no hidden outbound calls remain.
+- **Unknown / needs further validation:** Whether any installation relies on the toolbar or Resfly parsing. Needs field data.
+
+---
+
+## Reference material
+
+### R1. Entry-point inventory
+
+"Auth" is what the entry point itself enforces.
+
+| Entry point | Bootstrap (evidence) | Auth | Runtime status (baseline) |
+|---|---|---|---|
+| `index.php` | `config.php` `:42`; install gate `:44-48` (bypassed by `POST performMaintenence`); `constants.php` + 11 lib files `:59-70`; session `:74-75`; magic quotes `:93-109`; dispatch `:176-274` | Per module: `moduleRequiresAuthentication($_GET['m'])` `:195`, `:256` | Works (#01–#94) |
+| `ajax.php` | `config.php`, `constants.php`, `DatabaseConnection`, `Session`, `AJAXInterface`, `CATSUtility` `:36-41`; `f=fn` → `ajax/fn.php`, `f=mod:fn` → `modules/mod/ajax/fn.php` `:75-92`; buffered include, `AJAX_HOOK` eval, `$filters` eval `:108-131`. No install gate | Delegated to each handler (`SecureAJAXInterface` = login only) | 42 POSTs in the final run, all HTTP 200 (`nginx.log`) |
+| `careers/index.php` | `$careerPage = true; chdir('..')`, `config.php`, `CATSUtility`, include `getIndexName()` `:34-39` | None (module public) | Works after enabling (#80–#86); blank before (RT-16) |
+| `xml/index.php` | Same pattern `:34-39` | None | Works (#89) |
+| `rss/index.php` | Uses `LEGACY_ROOT` before config `:37` | None | Fatal (RT-05, #88); `index.php?m=rss` path not tested |
+| `QueueCLI.php` | `chdir(__DIR__)`, config, 13 lib files, `modules/queue/constants.php` `:34-52`; session `:55-56` | None, no SAPI check | Not run (no scheduler in baseline) |
+| `installwizard.php` → `ajax.php?f=install:ui` | `constants.php`, `config.php`, `TemplateUtility` | `modules/install/ajax/ui.php:55` refuses when `INSTALL_BLOCK` exists | Not run (would rewrite `config.php`) |
+| `installtest.php` | `config.php`, `InstallationTests` `:32` | None, no `INSTALL_BLOCK` check | Not run |
+| `rebuild_old_docs.php` | `config.php`, raw `mysqli_connect` | None, no SAPI check | Not run |
+| `scripts/*.php`, `scripts/*.sh` | `makeBackup.php` (CLI check `:37`, runs when `argv[1]` set `:52-62`), `sphinxtest.php` (CLI check `:18`); shell scripts target hosted-CATS paths | `scripts/index.php` is empty; no `.htaccess` | Not run |
+| `attachments/…` (static files) | Served by the web server; `.htaccess` is Apache-only | None under nginx | Directly downloadable (RT-17) |
+| `index.php?m=toolbar` | `modules/toolbar/ToolbarUI.php` (public module) | Logs in from `$_GET` credentials `:95-96` | Not tested |
+| `wsdl/*.wsdl` | Static client descriptors for `soap.resfly.com` and `catsone.com` | n/a | Not used in baseline |
+
+### R2. Request lifecycle (authenticated page, e.g. `index.php?m=candidates&a=show&candidateID=5`)
+
+1. **Config and gate.** `config.php` (`:42`) defines constants; without `INSTALL_BLOCK` the request is sent to `modules/install/notinstalled.php` (`:44-48`).
+2. **Eager includes.** `index.php:59-70`; `lib/TemplateUtility.php:38-39` loads `./vendor/autoload.php` and `Candidates.php` at file scope, which pulls in most of the domain layer (49 files in total).
+3. **Session.** `session_name('CATS')`, `session_start()` (`:74-75`); `$_SESSION['CATS']` is unserialized into `CATSSession` (class loaded first at `:67`). No `session_regenerate_id()` anywhere (SEC-007).
+4. **Per-request DB work.** Forced-logout SELECT (`:142-173`); `logPageView()` UPDATE of `user_login` on each page view (`:207`, `:271`; `lib/Session.php:618-630`).
+5. **Module list.** First request of a session: discovery + migrations (§2). Module names are whitelisted against the discovered list, so `m` cannot traverse paths.
+6. **Dispatch.** `loadModule()` includes the controller (`lib/ModuleUtility.php:71`), evals `LOAD_MODULE` (`:76`), instantiates and calls `handleRequest()` (`:78-79`). The controller evals its `*_HANDLE_REQUEST` hook, reads `$_GET['a']` (`lib/UserInterface.php:193-201`) and switches (e.g. `CandidatesUI.php:81-370`, 32 cases; default `listByView`).
+7. **Authorization.** Inline, e.g. `getUserAccessLevel('candidates.show')` → `CATSSession::getAccessLevel()` → `ACL::getAccessLevel()` (inert map) → the user's global level.
+8. **Data.** Gateways (`new Candidates($siteID)`) build SQL with `sprintf` + escape helpers; `DatabaseConnection::query()` rewrites `DATE_FORMAT(` for the user's offset (`:648-712`).
+9. **Render.** `$this->_template->assign(...)`, `display('./modules/candidates/Show.tpl')`: `ob_start`, `include`, leading-whitespace stripping unless the page contains `<!-- NOSPACEFILTER -->` or `textarea`, filter `eval`, echo (`lib/Template.php:98-129`). Templates call static `TemplateUtility::print*` helpers that read `$_SESSION` directly.
+10. **End.** Errors call `die()` via `CommonErrors::fatal()` or `UserInterface::fatal()`; the footer prints server response time and version.
+
+**Other interaction paths (runtime, `CURRENT_UI_MAP.md`):** pop-ups are full server-rendered pages loaded into an iframe by `showPopWin(url, w, h)` (`js/submodal/subModal.js:122`); AJAX goes to `ajax.php` with `f=<module>:<function>` in a POST body; data-grid state is JSON in the `parametersN` GET parameter; the careers site uses `careers/index.php?p=<page>`; graphs are server-rendered images from `index.php?m=graphs&a=…`.
+
+### R3. Module system
+
+- 23 module directories, each with one `<Name>UI.php` extending `UserInterface` (`lib/UserInterface.php:38-433`). Public modules: `careers`, `graphs`, `install`, `login`, `rss`, `toolbar`, `wizard`, `xml` (`_authenticationRequired = false`).
+- Tabs and sub-tabs with access levels are encoded in strings such as `'…&a=add*al=200@candidates.add'` and parsed at render time by `TemplateUtility::printTabs()` (`lib/TemplateUtility.php:570-800`).
+- Module schema: `getSchema()` returns `version => SQL | 'PHP:<code>'`; only `CATSUI` (install) declares one (`modules/install/CATSUI.php:39`).
+- Module tasks: `registerModuleTasks()` includes `modules/*/tasks/tasks.php` (`lib/ModuleUtility.php:86-101`); only `calendar` (Reminders) and `queue` (CleanExceptions) register tasks.
+- Core order and presence: `$coreModules` (`constants.php:30-41`), checked by `_checkCoreModules()` (`lib/ModuleUtility.php:302`, `:321-344`).
+
+### R4. Code-as-string (`eval`) inventory
+
+| Mechanism | Storage | Executed at | Count |
+|---|---|---|---|
+| Hooks | `$_SESSION['hooks']` (from `getHooks()`) | `eval(Hooks::get('X'))` | 278 sites, 50 files, 251 names, 10 implemented |
+| DataGrid renderers | PHP strings in column definitions | `lib/DataGrid.php:1206,1211,1441,1530,1912` | 82 `pagerRender` definitions |
+| Schema migrations | `modules/install/Schema.php` | `lib/ModuleUtility.php:542` | 25 `PHP:` steps |
+| Queue tasks | Class name from task path | `lib/QueueProcessor.php:210` | 2 recurring tasks |
+| Wizard pages | `$_SESSION['CATS_WIZARD']` | `modules/wizard/WizardUI.php:181` | — |
+| Installer components | `modules/install/OptionalComponents.php` | `modules/install/ajax/ui.php:544,551,1162` | — |
+| Careers fields / cookie | Field names | `modules/careers/CareersUI.php:280,285,1272` | — |
+| Output filters | `Template::addFilter()` (no callers), `ajax.php` `$filters` (never filled) | `lib/Template.php:125`, `ajax.php:127` | dead |
+
+### R5. PHP 8 compatibility matrix (PHP 8.4.19 CLI, re-run for this edition)
+
+| Construct | Locations | PHP status | Effect on PHP ≥ 8.0 |
+|---|---|---|---|
+| `$str{n}` string offsets (parse error) | `lib/CATSUtility.php:108,122`; `lib/fpdf/fpdf.php:434`; `lib/fpdf/font/makefont/makefont.php:18`; `lib/artichow/AntiSpam.class.php:63` | removed 8.0 | Every entry point dies (CATSUtility); PDF report and all graphs die |
+| `namespace \OpenCATS\Entity;` | `src/OpenCATS/Entity/JobOrderRepositoryException.php:2` | parse error | Job-order insert error path fatal |
+| `get_magic_quotes_runtime/gpc()` | `index.php:93,99`; `ajax.php:50,56`; `QueueCLI.php:59,65`; `lib/Attachments.php:944`; `lib/InstallationTests.php:185`; `modules/import/ImportUI.php:495`; `lib/fpdf/fpdf.php:911,1170` | removed 8.0 | Fatal on every request and in the installer check |
+| `implode($array, $glue)` | `lib/DataGrid.php:1292,1299,1328,1329` | removed 8.0 (`TypeError` verified) | Every data-grid list page fatal |
+| Property on undefined variable | `lib/ModuleUtility.php:307-308` | `Error` in 8.0 | Fatal when `CACHE_MODULES=true` |
+| `each()` | `lib/fpdf/fpdf.php:1285` | removed 8.0 | PDF output fatal |
+| `mysql_*` | `modules/install/Schema.php:725,854,1236` | removed 7.0 | Already fatal on 7.2 (RT-01) |
+| `mcrypt_*` | `lib/Encryption.php:52-110` | removed 7.2 | Unused file |
+| `create_function` | `optional-updates/latest-sphinx-search/Search.php:228,240,301,313` | removed 8.0 | Fatal if the optional update is applied |
+| mysqli default report mode | `lib/DatabaseConnection.php` (no `mysqli_report`) | changed 8.1 (mode `3` verified) | SQL errors become uncaught exceptions |
+| `count()` on non-countable | `modules/companies/Show.tpl:311,349,393` | warning on 7.2 (RT-06), `TypeError` on 8.0 | Company detail page fatal (inferred) |
+| Dynamic properties | `lib/Template.php:66` (every `assign()`), `src/OpenCATS/UI/QuickActionMenu.php:13`, `lib/Session.php:850` | deprecated 8.2 | Notices on every page; `Session.php:850` also means column preferences are never loaded |
+| `array('self', …)` callable | `lib/ModuleUtility.php:299` | deprecated 8.2 | Notice |
+| `strftime()` | `lib/DateUtility.php:148,472,476,480`; `lib/Calendar.php:575` | deprecated 8.1 | Notice |
+| `utf8_encode()` / `libxml_disable_entity_loader()` | `lib/DocumentToText.php:424,515` / `:415` | deprecated 8.2 / 8.0 | Notice |
+
+### R6. Configuration surfaces
+
+| Surface | Contents | Writers |
+|---|---|---|
+| `config.php` (tracked) | 82 constants: DB, paths, mail, LDAP, licence key, feature flags (`ENABLE_SPHINX`, `CACHE_MODULES`, `US_ZIPS_ENABLED`, `CATS_SLAVE`, `ENABLE_DEMO_MODE`, `PARSING_ENABLED`), commented `ACL_SETUP`/`JOB_TYPES`/status examples | Installer, settings (licence), footer, migrations (ARCH-014) |
+| `constants.php` | Version, core module order, access levels, data-item types, pipeline statuses, `CATS_ADMIN_SITE`, time zones, bad file extensions | Code only |
+| `settings` table | Per-site key/value by type (MAILER, CALENDAR, EEO, CAREER_PORTAL); some serialized PHP (DB-019) | Settings UI |
+| `system` table | UID, version-check state (`disable_version_check`) | Installer seed, settings |
+| Files in web root | `INSTALL_BLOCK`, `modules.cache`, `queue.time`, `cleanup.time` | Installer, runtime |
+| Copies | `test/config.php`, `optional-updates/latest-sphinx-search/config.php` (drifted) | Manual |
+
+### R7. Runtime baseline facts used in this document
+
+- Stack: PHP 7.2.16 FPM (image built 2019), nginx 1.17.3, MariaDB 10.7.8; `display_errors=On`, `error_reporting` hides notices and deprecations (`ENVIRONMENT.md` §2).
+- Final smoke run: 206 nginx requests, 195 × 200 and 11 × 302, no 4xx/5xx from PHP routes; 3 distinct PHP fatals (6 occurrences) and 8 distinct warnings; server time 24–73 ms per page on a near-empty DB (`KNOWN_RUNTIME_ERRORS.md`).
+- Install path: empty-database install works; demo-data install is unusable (RT-01); first request after seeding runs migration `'364'` (`INSTALLATION.md` §1, §5).
+
+---
+
+## Area-level unknowns
+
+1. **Behaviour on PHP 8.x beyond the first fatal.** Static checks list the hard blockers; null-to-string, `count()` and arithmetic changes cannot be enumerated statically. Validate by running the app with a database on PHP 8.x after the blockers are removed in a throw-away copy.
+2. **Real deployment topologies.** Apache vs nginx, single host vs containers, TLS proxies, PATH_INFO, opcache and `display_errors` settings decide ARCH-018, ARCH-022, ARCH-026 and ARCH-020 in practice. Validate with a survey of installations or published deployment guides.
+3. **Upgrade population.** How many installations carry schemas older than migration `'225'` and would hit RT-01 on upgrade. Validate with field data or upgrade reports.
+4. **Scheduler use.** Whether any installation runs `QueueCLI.php` under cron (age of `queue.time`). Validate on real installations.
+5. **Stored encoding mix.** How much production data is HTML-encoded vs raw (ARCH-008). Validate with a read-only scan of a real database.
+6. **Scale.** Cost of per-session module discovery, eager loading and REGEXP search at production volume. Validate with production-size data and load (PERFORMANCE_AUDIT owns the method).
+7. **Role behaviour.** Actual authorization outcomes for non-administrator roles (baseline used only `admin`). Validate with authorized role-based testing on an isolated instance.
+8. **Multi-site use.** Whether any installation runs more than one site (ARCH-013). Validate with field data.
+9. **Release artifacts.** Whether published GitHub release zips run without a manual `composer install` (ARCH-002). Validate by testing a published artifact on a clean host.
+
+## Changes from the Phase 0 edition
+
+- **Re-rated:** ARCH-006 HIGH → MEDIUM (security part owned by SEC-028 at MEDIUM; remainder is maintainability). ARCH-018 MEDIUM → HIGH (RT-17: candidate files downloadable without a session in the project's own topology). ARCH-020 MEDIUM → HIGH (RT-15/RT-04: fatals with stack traces served as HTTP 200, including to applicants). ARCH-024 LOW → MEDIUM (RT-07 editor does not start; RT-14 not responsive).
+- **New:** ARCH-026 (PDF report self-HTTP fetch; RT-09), ARCH-027 (no transaction/outbox around multi-step workflows; RT-04), ARCH-028 (no startup/configuration validation; RT-02, RT-08, RT-16).
+- **Merged in from `API_AUDIT.md`:** API-019 → ARCH-001 (same PHP 8 blockers); API-018 → ARCH-016 (queue/cron defects; the duplicated `case TASKRET_SUCCESS` detail moved here).
+- **Upgraded to Runtime:** ARCH-004 (RT-01 eval stack trace), ARCH-005 (RT-01, RT-02, INSTALLATION 5b), ARCH-009 (RT-02), ARCH-015 (RT-01, RT-02), ARCH-018 (RT-17, RT-08), ARCH-020 (RT-03/04/05/15), ARCH-022 (RT-05), ARCH-024 (RT-07/13/14), ARCH-025 (RT-09, RT-17). Partial: ARCH-006, ARCH-012 (#10, #19), ARCH-014, ARCH-017 (#38–#48), ARCH-019 (#22).
+- **Corrected facts:**
+  - ARCH-005: `Schema.php` has 195 version keys up to 364 (not "364 versions"), and key `'283'` is duplicated. A failed SQL step is recorded as applied, but a PHP fatal in a `PHP:` step is not, so the step re-runs and re-fails on every request (RT-01) — Phase 0 described only the first case.
+  - ARCH-004/ARCH-019: 251 distinct hook names (not 232), 241 unimplemented (not 222).
+  - ARCH-003: `$_SESSION` occurrence counts re-measured (127 in 27 lib files, 332 in modules); 44 `global`/`$GLOBALS` uses.
+  - ARCH-008: most recruiter add/edit handlers also HTML-encode on input (`getSanitisedInput`), not only the careers portal; the storage mix is broader than Phase 0 stated.
+  - ARCH-011: `Candidates::add()` has 29 parameters (not 30).
+  - ARCH-020: 112 `die(`/`exit(` calls (not 89).
+  - ARCH-024: `modules/candidates/activityvalidator.js` exists; only `modules/contacts/activityvalidator.js` is missing.
+  - ARCH-013: about 320 `site_id = %s` predicates with the stated pattern (Phase 0 quoted 342 with a looser pattern).
+- **Removed from this document:** Phase 0 implementation-level recommendations (specific libraries, file names, CI steps, target designs) were reduced to findings-level statements of what should change and why.
