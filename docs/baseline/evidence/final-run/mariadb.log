@@ -1,0 +1,88 @@
+db-1  | 2026-09-25 22:41:10+00:00 [Note] [Entrypoint]: Entrypoint script for MariaDB Server 1:10.7.8+maria~ubu2004 started.
+db-1  | 2026-09-25 22:41:10+00:00 [Note] [Entrypoint]: Switching to dedicated user 'mysql'
+db-1  | 2026-09-25 22:41:10+00:00 [Note] [Entrypoint]: Entrypoint script for MariaDB Server 1:10.7.8+maria~ubu2004 started.
+db-1  | 2026-09-25 22:41:10+00:00 [Note] [Entrypoint]: Initializing database files
+db-1  | 
+db-1  | 
+db-1  | PLEASE REMEMBER TO SET A PASSWORD FOR THE MariaDB root USER !
+db-1  | To do so, start the server, then issue the following command:
+db-1  | 
+db-1  | '/usr/bin/mariadb-secure-installation'
+db-1  | 
+db-1  | which will also give you the option of removing the test
+db-1  | databases and anonymous user created by default.  This is
+db-1  | strongly recommended for production servers.
+db-1  | 
+db-1  | See the MariaDB Knowledgebase at https://mariadb.com/kb
+db-1  | 
+db-1  | Please report any problems at https://mariadb.org/jira
+db-1  | 
+db-1  | The latest information about MariaDB is available at https://mariadb.org/.
+db-1  | 
+db-1  | Consider joining MariaDB's strong and vibrant community:
+db-1  | https://mariadb.org/get-involved/
+db-1  | 
+db-1  | 2026-09-25 22:41:11+00:00 [Note] [Entrypoint]: Database files initialized
+db-1  | 2026-09-25 22:41:11+00:00 [Note] [Entrypoint]: Starting temporary server
+db-1  | 2026-09-25 22:41:11+00:00 [Note] [Entrypoint]: Waiting for server startup
+db-1  | 2026-09-25 22:41:11 0 [Warning] Could not increase number of max_open_files to more than 20000 (request: 32186)
+db-1  | 2026-09-25 22:41:11 0 [Note] Starting MariaDB 10.7.8-MariaDB-1:10.7.8+maria~ubu2004 source revision bc656c4fa54c12ceabd857e8ae134f8979d82944 as process 92
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Compressed tables use zlib 1.2.11
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Using transactional memory
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Number of transaction pools: 1
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Using crc32 + pclmulqdq instructions
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Using Linux native AIO
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Initializing buffer pool, total size = 134217728, chunk size = 134217728
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Completed initialization of buffer pool
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: 128 rollback segments are active.
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Creating shared tablespace for temporary tables
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: Setting file './ibtmp1' size to 12 MB. Physically writing the file full; Please wait ...
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: File './ibtmp1' size is now 12 MB.
+db-1  | 2026-09-25 22:41:11 0 [Note] InnoDB: 10.7.8 started; log sequence number 41308; transaction id 14
+db-1  | 2026-09-25 22:41:11 0 [Note] Plugin 'FEEDBACK' is disabled.
+db-1  | 2026-09-25 22:41:11 0 [Warning] 'user' entry 'root@1ff10244bc53' ignored in --skip-name-resolve mode.
+db-1  | 2026-09-25 22:41:11 0 [Warning] 'proxies_priv' entry '@% root@1ff10244bc53' ignored in --skip-name-resolve mode.
+db-1  | 2026-09-25 22:41:11 0 [Note] mariadbd: ready for connections.
+db-1  | Version: '10.7.8-MariaDB-1:10.7.8+maria~ubu2004'  socket: '/run/mysqld/mysqld.sock'  port: 0  mariadb.org binary distribution
+db-1  | 2026-09-25 22:41:12+00:00 [Note] [Entrypoint]: Temporary server started.
+db-1  | 2026-09-25 22:41:13+00:00 [Note] [Entrypoint]: Creating database cats_dev
+db-1  | 2026-09-25 22:41:13+00:00 [Note] [Entrypoint]: Creating user cats
+db-1  | 2026-09-25 22:41:13+00:00 [Note] [Entrypoint]: Giving user cats access to schema cats_dev
+db-1  | 2026-09-25 22:41:13+00:00 [Note] [Entrypoint]: Securing system users (equivalent to running mysql_secure_installation)
+db-1  | 
+db-1  | 2026-09-25 22:41:13+00:00 [Note] [Entrypoint]: Stopping temporary server
+db-1  | 2026-09-25 22:41:13 0 [Note] mariadbd (initiated by: unknown): Normal shutdown
+db-1  | 2026-09-25 22:41:13 0 [Note] InnoDB: FTS optimize thread exiting.
+db-1  | 2026-09-25 22:41:13 0 [Note] InnoDB: Starting shutdown...
+db-1  | 2026-09-25 22:41:13 0 [Note] InnoDB: Dumping buffer pool(s) to /var/lib/mysql/ib_buffer_pool
+db-1  | 2026-09-25 22:41:13 0 [Note] InnoDB: Buffer pool(s) dump completed at 260925 22:41:13
+db-1  | 2026-09-25 22:41:13 0 [Note] InnoDB: Removed temporary tablespace data file: "./ibtmp1"
+db-1  | 2026-09-25 22:41:13 0 [Note] InnoDB: Shutdown completed; log sequence number 42282; transaction id 15
+db-1  | 2026-09-25 22:41:13 0 [Note] mariadbd: Shutdown complete
+db-1  | 
+db-1  | 2026-09-25 22:41:13+00:00 [Note] [Entrypoint]: Temporary server stopped
+db-1  | 
+db-1  | 2026-09-25 22:41:13+00:00 [Note] [Entrypoint]: MariaDB init process done. Ready for start up.
+db-1  | 
+db-1  | 2026-09-25 22:41:13 0 [Warning] Could not increase number of max_open_files to more than 20000 (request: 32186)
+db-1  | 2026-09-25 22:41:13 0 [Note] Starting MariaDB 10.7.8-MariaDB-1:10.7.8+maria~ubu2004 source revision bc656c4fa54c12ceabd857e8ae134f8979d82944 as process 1
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Compressed tables use zlib 1.2.11
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Using transactional memory
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Number of transaction pools: 1
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Using crc32 + pclmulqdq instructions
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Using Linux native AIO
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Initializing buffer pool, total size = 134217728, chunk size = 134217728
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Completed initialization of buffer pool
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: 128 rollback segments are active.
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Creating shared tablespace for temporary tables
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Setting file './ibtmp1' size to 12 MB. Physically writing the file full; Please wait ...
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: File './ibtmp1' size is now 12 MB.
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: 10.7.8 started; log sequence number 42282; transaction id 14
+db-1  | 2026-09-25 22:41:14 0 [Note] Plugin 'FEEDBACK' is disabled.
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Loading buffer pool(s) from /var/lib/mysql/ib_buffer_pool
+db-1  | 2026-09-25 22:41:14 0 [Warning] You need to use --log-bin to make --expire-logs-days or --binlog-expire-logs-seconds work.
+db-1  | 2026-09-25 22:41:14 0 [Note] InnoDB: Buffer pool(s) load completed at 260925 22:41:14
+db-1  | 2026-09-25 22:41:14 0 [Note] Server socket created on IP: '0.0.0.0'.
+db-1  | 2026-09-25 22:41:14 0 [Warning] Failed to create a socket for IPv6 '::': errno: 97.
+db-1  | 2026-09-25 22:41:14 0 [Note] mariadbd: ready for connections.
+db-1  | Version: '10.7.8-MariaDB-1:10.7.8+maria~ubu2004'  socket: '/run/mysqld/mysqld.sock'  port: 3306  mariadb.org binary distribution

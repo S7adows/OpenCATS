@@ -1,0 +1,9 @@
+
+== mode: sql ==
+[upgrade-0.9.4-0.9.5.sql] ERROR 1054 Unknown column 'questionnaire_id' in 'joborder' :: /* Upgrade file for DB schema update from version 0.9.4 to 0.9.5 */ /* new column in joborder table for import */ ALTER TABLE `joborder` ADD COLUMN `import_id` int(11) NOT NULL DEFAULT '0' AFTER `ques
+
+== summary ==
+demo catsbackup.sql.0            ok=144 errors=0
+detected revision = 94
+upgrade-0.9.4-0.9.5.sql          ok=2 errors=1
+upgrade-zipcodes.sql             ok=45 errors=0

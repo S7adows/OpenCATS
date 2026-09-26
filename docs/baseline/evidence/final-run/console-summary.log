@@ -1,0 +1,94 @@
+01 [PASS] 01 Login :: login page renders (152ms)   
+02 [PASS] 01 Login :: invalid password rejected (133ms)    NOTES=message: Invalid username or password.
+03 [PASS] 15 Email :: forgot-password page (logged out) (35ms) console:2 http4xx5xx:2 brokenImg:2   NOTES=page text: OpenCATS Username Welcome to OpenCATS! 
+04 [PASS] 15 Email :: forgot-password submit for admin (65ms) php:2   NOTES=result text:  Fatal error: Uncaught Error: Call to undefined method Users::getPassword() in /var/www/public/modules/login/LoginUI.php:455 Stack trace: #0 /var/www/public/modules/login/LoginUI.php(60): LoginUI->onF
+05 [PASS] 01 Login :: login as admin/admin (234ms)   
+06 [PASS] 02 Dashboard :: home dashboard (85ms)   
+07 [PASS] 02 Dashboard :: Activities tab (69ms)   
+08 [PASS] 02 Dashboard :: Lists tab (52ms)   
+09 [PASS] 06 Companies :: companies list (69ms)   
+10 [PASS] 06 Companies :: add company (form submit) (247ms) php:3   NOTES=companyID=2
+11 [PASS] 06 Companies :: company detail (60ms) php:3  
+12 [PASS] 06 Companies :: edit company page (79ms)   
+13 [PASS] 07 Contacts :: contacts list (60ms)   
+14 [PASS] 07 Contacts :: add contact with company autocomplete (5111ms)    NOTES=autocomplete: clicked; #companyID=2 | contactID=1
+15 [PASS] 07 Contacts :: contact detail (61ms)   
+16 [PASS] 07 Contacts :: cold call list (50ms)   
+17 [PASS] 05 Jobs :: job orders list (79ms)   
+18 [PASS] 05 Jobs :: Add Job Order popup (388ms)    NOTES=popup text:  Job Orders: Add Job Order Add Job Order Empty Job Order Copy Existing Job Order 
+19 [PASS] 05 Jobs :: add job order (public) (5321ms) console:1 reqFailed:1   NOTES=autocomplete: clicked; #companyID=2 | public checked | description via textarea | jobOrderID=1
+20 [PASS] 05 Jobs :: job order detail (81ms)   
+21 [PASS] 03 Candidates :: candidates list (before add) (69ms)   
+22 [PASS] 14 Resume :: add-candidate: upload resume text file for parsing (233ms)    NOTES=Upload button disabled after choosing file: false | documentText length after upload: 186 (contains resume keyword)
+23 [PASS] 03 Candidates :: add candidate (form submit) (196ms)    NOTES=candidateID=2
+24 [PASS] 03 Candidates :: add duplicate candidate (same name/email) (240ms)    NOTES=duplicateCandidateID=3; duplicate notice: yes
+25 [PASS] 03 Candidates :: candidates list (after add) (72ms)   
+26 [PASS] 04 Candidate detail :: candidate detail page (66ms)   
+27 [PASS] 14 Resume :: upload PDF attachment via popup (3087ms)    NOTES=popup after submit: The file has been successfully attached, but OpenCATS was unable to index the resume keywords to make the document searchable. The file format may be unsupporte
+28 [PASS] 14 Resume :: upload DOCX attachment via popup (2958ms)   
+29 [PASS] 14 Resume :: download attachments (integrity check) (73ms)    NOTES=attachment links: 3 | GET /index.php?m=attachments&a=getAttachment&id=1&directoryNameHash=a2c53949e4c29e9277c8b21736 -> 200 text/plain;charset=UTF-8 187B disp=inline; filename="resume_alex.txt" | GET /index.php?m=attachments&a=getAttachment&id=2&directoryNameHash=755ea2809aa4442225a8ca5868 -> 200 application/pdf 674B disp=inline; filename="portfolio_alex.pdf" | GET /index.php?m=attachments&a=getAttachment&id=3&directoryNameHash=600d784796b717a1b5b3a24f5e -> 200 application/octet-stream 1359B disp=inline; filename="cover_alex.docx" | expected sizes: {"portfolio_alex.pdf":674,"cover_alex.docx":1359}
+30 [PASS] 04 Candidate detail :: add candidate to job pipeline (popup search) (4117ms)    NOTES=search results: Search for a job order below, and then click on the job title to add the candidate to the selected job order. Search by Job Title: * Search by Company Name: * S
+31 [PASS] 15 Email :: pipeline status change + activity (may trigger candidate e-mail) (4363ms)    NOTES=status options: -1=(Select a Status), 100=No Contact, 200=Contacted, 250=Candidate Responded, 300=Qualifying, 400=Submitted, 500=Interviewing, 600=Offered, 650=Not in Consideration, 700=Client Declined, 800=Placed | triggerEmail checkbox present, checked=false | popup after save: The candidate's status has been changed from No Contact to Contacted. An activity entry of type Call has been added with the following note: "Baseline smoke-test activity note (TEST)". No event has been scheduled. No e-m
+32 [PASS] 04 Candidate detail :: candidate detail after pipeline/activity (65ms)   
+33 [PASS] 04 Candidate detail :: edit candidate + save (222ms)   
+34 [PASS] 14 Resume :: view resume text page (109ms)    NOTES=viewResume link: # window.open('index.php?m=candidates&a=viewResume&attachmentID=1', 'viewResume', 'scrollbars=1,width=800,height=760') | text: Alex Baseline-Test (FICTIONAL TEST DATA) alex.baseline@example.test | 555-0101 | Testville, TS Summary: QA engineer. Uni
+35 [PASS] 08 Calendar :: calendar month view (77ms)   
+36 [PASS] 08 Calendar :: add calendar event (1105ms)    NOTES=event types: =(Select a Type), 100=Call, 200=Email, 300=Meeting, 400=Interview, 500=Personal, 600=Other
+37 [PASS] 08 Calendar :: upcoming events (1002ms)   
+38 [PASS] 09 Search :: quick search (header) (175ms)    NOTES=result links outside Recent bar: {"candidateID=2":2,"companyID=2":3,"contactID=1":2,"jobOrderID=1":1}
+39 [PASS] 09 Search :: candidate search by name (149ms)    NOTES=term="Alex Baseline-Test" result links to candidateID=2 (outside Recent bar): 2; expected >=1
+40 [PASS] 09 Search :: candidate search by key skills (163ms)    NOTES=term="playwright" result links to candidateID=2 (outside Recent bar): 2; expected >=1
+41 [PASS] 09 Search :: candidate search by city (149ms)    NOTES=term="Testville" result links to candidateID=2 (outside Recent bar): 2; expected >=1
+42 [PASS] 14 Resume :: resume keyword search: TXT resume (Zyxwvutronics) (168ms)    NOTES=term="Zyxwvutronics" result links to candidateID=2 (outside Recent bar): 2; expected >=1
+43 [FAIL] 14 Resume :: resume keyword search: PDF attachment (Quokkaflux) (156ms)    NOTES=term="Quokkaflux" result links to candidateID=2 (outside Recent bar): 0; expected >=1
+44 [PASS] 14 Resume :: resume keyword search: DOCX attachment (Pangolinware) (180ms)    NOTES=term="Pangolinware" result links to candidateID=2 (outside Recent bar): 2; expected >=1
+45 [PASS] 14 Resume :: resume keyword search: negative control (term not in any document) (182ms)    NOTES=term="Nonexistentkeywordqq" result links to candidateID=2 (outside Recent bar): 0; expected none
+46 [PASS] 09 Search :: job order search (158ms)    NOTES=term="QA Engineer" result links to jobOrderID=1 (outside Recent bar): 1; expected >=1
+47 [PASS] 09 Search :: company search (151ms)    NOTES=term="Baseline" result links to companyID=2 (outside Recent bar): 1; expected >=1
+48 [PASS] 09 Search :: contact search (149ms)    NOTES=term="Contact-Test" result links to contactID=1 (outside Recent bar): 2; expected >=1
+49 [PASS] 10 Reports :: reports tab (64ms)   
+50 [PASS] 10 Reports :: submission report (to date) (45ms)   
+51 [PASS] 10 Reports :: placement report (to date) (44ms)   
+52 [PASS] 10 Reports :: EEO report customize + preview (1149ms) jsErr:2   NOTES=preview url: /index.php?m=reports&a=generateEEOReportPreview&period=all&status=all&submit=Preview+Report
+53 [PASS] 10 Reports :: job order report customize page (52ms)   
+54 [FAIL] 10 Reports :: job order report PDF generation (31ms)    NOTES=form fields: m,a,siteName,companyName,jobOrderName,periodLine,accountManager,recruiter,dataSet,dataSet1,dataSet2,dataSet3,dataSet4,notes,ext,submit | POST -> 200 text/html; charset=UTF-8 374B starts="<br />\n<"
+55 [PASS] 10 Reports :: job order pipeline graph image (43ms)    NOTES=graph -> 200 image/jpeg 27248B
+56 [PASS] 11 Settings :: my profile (58ms)    NOTES=HTTP 200
+57 [PASS] 11 Settings :: administration (57ms)    NOTES=HTTP 200
+58 [PASS] 11 Settings :: change password page (55ms)    NOTES=HTTP 200
+59 [PASS] 11 Settings :: site details (51ms)    NOTES=HTTP 200
+60 [PASS] 11 Settings :: user management (60ms)    NOTES=HTTP 200
+61 [PASS] 11 Settings :: add user page (55ms)    NOTES=HTTP 200
+62 [PASS] 11 Settings :: login activity (68ms)    NOTES=HTTP 200
+63 [PASS] 11 Settings :: e-mail templates (62ms)    NOTES=HTTP 200
+64 [PASS] 11 Settings :: localization (56ms)    NOTES=HTTP 200
+65 [PASS] 11 Settings :: site backup page (55ms)    NOTES=HTTP 200
+66 [PASS] 11 Settings :: EEO settings (63ms)    NOTES=HTTP 200
+67 [PASS] 11 Settings :: tags (58ms)    NOTES=HTTP 200
+68 [PASS] 11 Settings :: customize calendar (56ms)    NOTES=HTTP 200
+69 [PASS] 11 Settings :: extra fields (58ms)    NOTES=HTTP 200
+70 [PASS] 11 Settings :: passwords (55ms)    NOTES=HTTP 200
+71 [PASS] 11 Settings :: new version check page (70ms)    NOTES=HTTP 200
+72 [PASS] 11 Settings :: system information (54ms)    NOTES=HTTP 200
+73 [PASS] 11 Settings :: data import page (57ms)    NOTES=HTTP 200
+74 [PASS] 11 Settings :: add user (test recruiter) (275ms)    NOTES=fields: m,a,quickSearchFor,quickSearch,postback,role,firstName,lastName,email,username,password,retypePassword,accessLevel,accessLevel,accessLevel,accessLevel,accessLevel,accessLevel,submit,reset,back | after submit url: /index.php?m=settings&a=showUser&userID=1251 text:  OpenCATS.org Logout CATS Administrator <admin> (testdomain.com) Administrator Dashboard Activities Job Orders Candidates Companies Contacts Lists Calendar Repo
+75 [PASS] 12 Careers portal :: enable careers website (Settings) (1973ms)    NOTES=enabled before: false | enabled after reload: true
+76 [PASS] 15 Email :: e-mail settings page (66ms)   
+77 [PASS] 15 Email :: send test e-mail from settings (no SMTP server present) (8060ms) php:1   NOTES=testOutput:  An error occurred. Fatal error: Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(2019): PH
+78 [PASS] 15 Email :: e-mail candidate from list (compose) (1598ms) php:1 console:1 reqFailed:1   NOTES=ui: clicked
+79 [PASS] 15 Email :: e-mail candidate send (1621ms) php:1   NOTES=result:  Fatal error: Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/phpmai
+80 [PASS] 12 Careers portal :: careers home (50ms)   
+81 [PASS] 12 Careers portal :: careers: list all jobs (41ms)    NOTES=job listed: true
+82 [PASS] 12 Careers portal :: careers: job detail (52ms)   
+83 [PASS] 12 Careers portal :: careers: search page (37ms)   
+84 [PASS] 13 Candidate application :: apply form (160ms)    NOTES=apply link: index.php?m=careers&p=applyToJob&ID=1 | fields: ID:hidden,candidateID:hidden,applyToJobSubAction:hidden,file:hidden,resumeFile:file,resumeLoad:button,resumeContents:textarea,firstName:text,lastName:text,email:text,emailconfirm:text,phoneHome:text,phoneCell:text,phone:text,bestTimeToCall:text,address:textarea,city:text,state:text,zip:text,keySkills:text
+85 [PASS] 13 Candidate application :: apply: file chosen, Upload NOT clicked, submit (2274ms) php:1   NOTES=result page:  Fatal error: Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack
+86 [PASS] 13 Candidate application :: apply: Choose File -> Upload -> submit (DOCX) (2379ms) php:1   NOTES=Upload button disabled after choosing file: false | resume textarea after Upload:  Morgan Applicant2-Test resume - FICTIONAL TEST DATA. morgan.applicant@example.test. Unique keyword: Axolotlex  | hidden file field after Upload: resume_morgan.docx | result page:  Fatal error: Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack
+87 [PASS] 13 Candidate application :: applicants visible to recruiter (pipeline + attachments + resume search) (585ms)    NOTES=in job pipeline: Jordan=true Morgan=true | Applicant-Test (candidateID=4) attachments: [] | Applicant2-Test (candidateID=5) attachments: ["resume_morgan.docx"] | resume keyword Axolotlex (inside uploaded DOCX) finds Morgan: true
+88 [PASS] 12 Careers portal :: RSS job feed (13ms) php:5   NOTES=HTTP 200 text/html; charset=UTF-8
+89 [PASS] 12 Careers portal :: XML job feed (37ms)    NOTES=HTTP 200 text/xml;charset=UTF-8
+90 [PASS] 02 Dashboard :: home dashboard with test data (81ms)   
+91 [PASS] 02 Dashboard :: Activities: all periods (96ms)   
+92 [PASS] Layout :: candidates list at 390px width (75ms)    NOTES=scrollWidth=978
+93 [PASS] Layout :: careers job list at 390px width (43ms)    NOTES=scrollWidth=940
+94 [PASS] 01 Login :: logout (125ms)   

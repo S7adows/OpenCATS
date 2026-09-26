@@ -1,0 +1,61 @@
+[25-Sep-2026 22:58:45 UTC] PHP Fatal error:  Uncaught Error: Call to undefined method Users::getPassword() in /var/www/public/modules/login/LoginUI.php:455
+Stack trace:
+#0 /var/www/public/modules/login/LoginUI.php(60): LoginUI->onForgotPassword()
+#1 /var/www/public/lib/ModuleUtility.php(79): LoginUI->handleRequest()
+#2 /var/www/public/index.php(259): ModuleUtility::loadModule('login')
+#3 {main}
+  thrown in /var/www/public/modules/login/LoginUI.php on line 455
+[25-Sep-2026 22:58:48 UTC] PHP Warning:  count(): Parameter must be an array or an object that implements Countable in /var/www/public/modules/companies/Show.tpl on line 311
+[25-Sep-2026 22:58:48 UTC] PHP Warning:  count(): Parameter must be an array or an object that implements Countable in /var/www/public/modules/companies/Show.tpl on line 349
+[25-Sep-2026 22:58:48 UTC] PHP Warning:  count(): Parameter must be an array or an object that implements Countable in /var/www/public/modules/companies/Show.tpl on line 393
+[25-Sep-2026 22:58:49 UTC] PHP Warning:  count(): Parameter must be an array or an object that implements Countable in /var/www/public/modules/companies/Show.tpl on line 311
+[25-Sep-2026 22:58:49 UTC] PHP Warning:  count(): Parameter must be an array or an object that implements Countable in /var/www/public/modules/companies/Show.tpl on line 349
+[25-Sep-2026 22:58:49 UTC] PHP Warning:  count(): Parameter must be an array or an object that implements Countable in /var/www/public/modules/companies/Show.tpl on line 393
+[25-Sep-2026 22:59:42 UTC] PHP Warning:  getimagesize(http://localhost:8080/index.php?m=graphs&amp;a=jobOrderReportGraph&amp;data=1%2C0%2C0%2C0): failed to open stream: Connection refused in /var/www/public/lib/fpdf/fpdf.php on line 1508
+[25-Sep-2026 22:59:57 UTC] PHP Fatal error:  Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233
+Stack trace:
+#0 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(2019): PHPMailer\PHPMailer\PHPMailer->smtpConnect(Array)
+#1 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1678): PHPMailer\PHPMailer\PHPMailer->smtpSend('Date: Fri, 25 S...', '--b1=_X9BR1dEIw...')
+#2 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1516): PHPMailer\PHPMailer\PHPMailer->postSend()
+#3 /var/www/public/lib/Mailer.php(241): PHPMailer\PHPMailer\PHPMailer->send()
+#4 /var/www/public/lib/Mailer.php(134): Mailer->send(Array, Array, 'CATS Test E-Mai...', 'This is a CATS ...', true, true, Array, 78, true)
+#5 /var/www/public/ajax/testEmailSettings.php(92): Mailer->sendToOne(Array, 'CATS Test E-Mai...', 'This is a CATS ...', true)
+#6 /var/www/public/ajax.php(115): include('/var/www/public...')
+#7 {main}
+  thrown in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php on line 2233
+[25-Sep-2026 23:00:05 UTC] PHP Warning:  Invalid argument supplied for foreach() in /var/www/public/lib/DataGrid.php on line 248
+[25-Sep-2026 23:00:07 UTC] PHP Fatal error:  Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233
+Stack trace:
+#0 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(2019): PHPMailer\PHPMailer\PHPMailer->smtpConnect(Array)
+#1 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1678): PHPMailer\PHPMailer\PHPMailer->smtpSend('Date: Fri, 25 S...', '--b1=_DQWpA598w...')
+#2 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1516): PHPMailer\PHPMailer\PHPMailer->postSend()
+#3 /var/www/public/lib/Mailer.php(241): PHPMailer\PHPMailer\PHPMailer->send()
+#4 /var/www/public/modules/candidates/CandidatesUI.php(3330): Mailer->send(Array, Array, 'Baseline smoke ...', 'Fictional messa...', true, true)
+#5 /var/www/public/modules/candidates/CandidatesUI.php(306): CandidatesUI->onEmailCandidates()
+#6 /var/www/public/lib/ModuleUtility.php(79): CandidatesUI->handleRequest()
+#7 /var/www/public/index.php(272): ModuleUtilit in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php on line 2233
+[25-Sep-2026 23:00:12 UTC] PHP Fatal error:  Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233
+Stack trace:
+#0 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(2019): PHPMailer\PHPMailer\PHPMailer->smtpConnect(Array)
+#1 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1678): PHPMailer\PHPMailer\PHPMailer->smtpSend('Date: Fri, 25 S...', '--b1=_NPYhNQbJ3...')
+#2 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1516): PHPMailer\PHPMailer\PHPMailer->postSend()
+#3 /var/www/public/lib/Mailer.php(241): PHPMailer\PHPMailer\PHPMailer->send()
+#4 /var/www/public/lib/Mailer.php(134): Mailer->send(Array, Array, 'Thank You for Y...', '* This is an au...', true, true, Array, 78, true)
+#5 /var/www/public/lib/CareerPortal.php(466): Mailer->sendToOne(Array, 'Thank You for Y...', '* This is an au...', true)
+#6 /var/www/public/modules/careers/CareersUI.php(1522): CareerPortalSettings->sendEmail('1250', 'jorda in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php on line 2233
+[25-Sep-2026 23:00:15 UTC] PHP Fatal error:  Uncaught PHPMailer\PHPMailer\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233
+Stack trace:
+#0 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(2019): PHPMailer\PHPMailer\PHPMailer->smtpConnect(Array)
+#1 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1678): PHPMailer\PHPMailer\PHPMailer->smtpSend('Date: Fri, 25 S...', '--b1=_67BBIA4Il...')
+#2 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(1516): PHPMailer\PHPMailer\PHPMailer->postSend()
+#3 /var/www/public/lib/Mailer.php(241): PHPMailer\PHPMailer\PHPMailer->send()
+#4 /var/www/public/lib/Mailer.php(134): Mailer->send(Array, Array, 'Thank You for Y...', '* This is an au...', true, true, Array, 78, true)
+#5 /var/www/public/lib/CareerPortal.php(466): Mailer->sendToOne(Array, 'Thank You for Y...', '* This is an au...', true)
+#6 /var/www/public/modules/careers/CareersUI.php(1522): CareerPortalSettings->sendEmail('1250', 'morga in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php on line 2233
+[25-Sep-2026 23:00:19 UTC] PHP Warning:  Use of undefined constant LEGACY_ROOT - assumed 'LEGACY_ROOT' (this will throw an Error in a future version of PHP) in /var/www/public/rss/index.php on line 37
+[25-Sep-2026 23:00:19 UTC] PHP Warning:  include_once(LEGACY_ROOT/lib/CATSUtility.php): failed to open stream: No such file or directory in /var/www/public/rss/index.php on line 37
+[25-Sep-2026 23:00:19 UTC] PHP Warning:  include_once(): Failed opening 'LEGACY_ROOT/lib/CATSUtility.php' for inclusion (include_path='.:/usr/local/lib/php') in /var/www/public/rss/index.php on line 37
+[25-Sep-2026 23:00:19 UTC] PHP Fatal error:  Uncaught Error: Class 'CATSUtility' not found in /var/www/public/rss/index.php:38
+Stack trace:
+#0 {main}
+  thrown in /var/www/public/rss/index.php on line 38

@@ -1,0 +1,76 @@
+# OpenCATS preview environment — ENVIRONMENT-ONLY compose file. Not part of the application.
+#
+# Same application containers as the Phase 0.5 baseline (PHP 7.2 FPM, prooph nginx, MariaDB 10.7,
+# credentials matching the committed config.php), plus:
+#   * gateway     — nginx in front of the app: preview banner, HTTPS redirects, script blocking
+#   * cloudflared — optional (profile "tunnel"): temporary public HTTPS URL for the gateway
+#
+# Network isolation: php, web and db sit on an INTERNAL network with no route to the internet,
+# so the application cannot send e-mail or talk to any third-party service. Only the gateway
+# (and cloudflared) are attached to the outbound network.
+#
+# Started by preview-up.sh, which sets the variables below.
+name: ${PREVIEW_PROJECT:-opencats-preview}
+
+services:
+  php:
+    image: opencats/php-base:7.2-fpm-alpine@sha256:711fa18180f03f685a6958f75e498aefd589aba29f3d1ea5bc6ddc14bb746aa3
+    volumes:
+      - ${PREVIEW_APP_DIR:?set PREVIEW_APP_DIR}:/var/www/public
+      - ../env/php-conf/zz-baseline.ini:/usr/local/etc/php/conf.d/zz-baseline.ini:ro
+      - ../env:/baseline-env:ro
+      - mysqld-sock:/run/mysqld
+      - ${PREVIEW_LOG_DIR:?set PREVIEW_LOG_DIR}/php:/var/log/php-baseline
+    networks: [app]
+    depends_on: [db]
+    restart: unless-stopped
+
+  web:
+    image: prooph/nginx:www@sha256:43ebf7de649b41ebd05eddd3fb271b74e59ae4131b765535c328a2b21e28e89b
+    volumes:
+      - ${PREVIEW_APP_DIR:?set PREVIEW_APP_DIR}:/var/www/public:ro
+    networks: [app]
+    depends_on: [php]
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.7@sha256:9a48ac9f196f3d4fd6fea2cab59a49df9e7ca459bf14b2f7b85a0e38a5454571
+    environment:
+      - MYSQL_ROOT_PASSWORD=${PREVIEW_DB_ROOT_PASSWORD:-root}
+      - MYSQL_DATABASE=cats_dev
+      - MYSQL_USER=cats
+      - MYSQL_PASSWORD=password
+    volumes:
+      - mysqld-sock:/run/mysqld
+    networks: [app]
+    restart: unless-stopped
+
+  gateway:
+    image: ${PREVIEW_GATEWAY_IMAGE:-nginx:1.27-alpine}
+    command: ["nginx", "-g", "daemon off;"]
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:${PREVIEW_PORT:-8090}:8080"
+    networks: [app, edge]
+    depends_on: [web]
+    restart: unless-stopped
+
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    # Quick tunnel (random https://<words>.trycloudflare.com) unless a named-tunnel token is given.
+    command: ${PREVIEW_TUNNEL_COMMAND:-tunnel --no-autoupdate --url http://gateway:8080}
+    environment:
+      - TUNNEL_TOKEN=${PREVIEW_TUNNEL_TOKEN:-}
+    networks: [edge]
+    depends_on: [gateway]
+    restart: unless-stopped
+
+networks:
+  app:
+    internal: true
+  edge: {}
+
+volumes:
+  mysqld-sock:

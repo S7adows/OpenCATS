@@ -1,0 +1,40 @@
+# OpenCATS Phase 0.5 baseline — ENVIRONMENT-ONLY compose file. Not part of the application.
+#
+# Same images as the repository's docker/docker-compose-test.yml (PHP 7.2 FPM, prooph nginx,
+# MariaDB 10.7), but:
+#   * the application is mounted from a separate runtime copy (OPENCATS_APP_DIR), never from
+#     the git working tree;
+#   * the database credentials match the tracked config.php (cats / password / cats_dev),
+#     so config.php does not need to be edited;
+#   * DATABASE_HOST 'localhost' works because the MariaDB Unix socket is shared into the
+#     php container (see php-conf/zz-baseline.ini).
+# Normally started by baseline-up.sh, which sets the variables below.
+services:
+  php:
+    image: opencats/php-base:7.2-fpm-alpine
+    volumes:
+      - ${OPENCATS_APP_DIR:?set OPENCATS_APP_DIR}:/var/www/public
+      - ./php-conf/zz-baseline.ini:/usr/local/etc/php/conf.d/zz-baseline.ini:ro
+      - ./:/baseline-env:ro
+      - mysqld-sock:/run/mysqld
+      - ${OPENCATS_LOG_DIR:?set OPENCATS_LOG_DIR}/php:/var/log/php-baseline
+    depends_on: [db]
+  web:
+    # nginx config inside this image: root /var/www/public, fastcgi_pass to "php:9000".
+    image: prooph/nginx:www
+    ports:
+      - "${OPENCATS_PORT:-8080}:80"
+    volumes:
+      - ${OPENCATS_APP_DIR:?set OPENCATS_APP_DIR}:/var/www/public
+    depends_on: [php]
+  db:
+    image: mariadb:10.7
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=cats_dev
+      - MYSQL_USER=cats
+      - MYSQL_PASSWORD=password
+    volumes:
+      - mysqld-sock:/run/mysqld
+volumes:
+  mysqld-sock:

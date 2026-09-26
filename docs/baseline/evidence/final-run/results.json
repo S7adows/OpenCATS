@@ -1,0 +1,2462 @@
+{
+ "ids": {
+  "companyID": "2",
+  "contactID": "1",
+  "jobOrderID": "1",
+  "candidateID": "2",
+  "duplicateCandidateID": "3",
+  "Applicant-Test": "4",
+  "Applicant2-Test": "5"
+ },
+ "results": [
+  {
+   "n": 1,
+   "feature": "01 Login",
+   "name": "login page renders",
+   "url": "/index.php",
+   "title": "opencats - Login",
+   "ms": 152,
+   "timing": {
+    "ttfb": 74,
+    "dcl": 106,
+    "load": 114
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "01-01-login-login-page-renders.png"
+  },
+  {
+   "n": 2,
+   "feature": "01 Login",
+   "name": "invalid password rejected",
+   "url": "/index.php?m=login&a=attemptLogin",
+   "title": "opencats - Login",
+   "ms": 133,
+   "timing": {
+    "ttfb": 19,
+    "dcl": 38,
+    "load": 44
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "message: Invalid username or password."
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "02-01-login-invalid-password-rejected.png"
+  },
+  {
+   "n": 3,
+   "feature": "15 Email",
+   "name": "forgot-password page (logged out)",
+   "url": "/index.php?m=login&a=forgotPassword",
+   "title": "OpenCATS - Login",
+   "ms": 35,
+   "timing": {
+    "ttfb": 16,
+    "dcl": 30,
+    "load": 30
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "page text: OpenCATS Username Welcome to OpenCATS! "
+   ],
+   "php": [],
+   "brokenImages": [
+    "images/login.gif",
+    "images/security.gif"
+   ],
+   "console": [
+    "[error] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8080/images/login.gif:",
+    "[error] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8080/images/security.gif:"
+   ],
+   "pageErrors": [],
+   "failed": [],
+   "http": [
+    "404 GET http://localhost:8080/images/login.gif",
+    "404 GET http://localhost:8080/images/security.gif"
+   ],
+   "dialogs": [],
+   "shot": "03-15-email-forgot-password-page-logged-out.png"
+  },
+  {
+   "n": 4,
+   "feature": "15 Email",
+   "name": "forgot-password submit for admin",
+   "url": "/index.php?m=login&a=forgotPassword",
+   "title": "",
+   "ms": 65,
+   "timing": {
+    "ttfb": 16,
+    "dcl": 23,
+    "load": 23
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "result text:  Fatal error: Uncaught Error: Call to undefined method Users::getPassword() in /var/www/public/modules/login/LoginUI.php:455 Stack trace: #0 /var/www/public/modules/login/LoginUI.php(60): LoginUI->onF"
+   ],
+   "php": [
+    "Fatal error: Uncaught Error: Call to undefined method Users::getPassword() in /var/www/public/modules/login/LoginUI.php:455 Stack trace: #0 /var/www/public/modules/login/LoginUI.php(60): LoginUI-&gt;onForgotPassword() #1 /var/www/pub in modules/login/LoginUI.php:455",
+    "DB/Query/Uncaught error text on page (index.php?m=login&a=forgotPassword)"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "04-15-email-forgot-password-submit-for-admin.png"
+  },
+  {
+   "n": 5,
+   "feature": "01 Login",
+   "name": "login as admin/admin",
+   "url": "/index.php?m=home",
+   "title": "OpenCATS - Home",
+   "ms": 234,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 117,
+    "load": 150
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "05-01-login-login-as-admin-admin.png"
+  },
+  {
+   "n": 6,
+   "feature": "02 Dashboard",
+   "name": "home dashboard",
+   "url": "/index.php?m=home",
+   "title": "OpenCATS - Home",
+   "ms": 85,
+   "timing": {
+    "ttfb": 34,
+    "dcl": 68,
+    "load": 82
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "06-02-dashboard-home-dashboard.png"
+  },
+  {
+   "n": 7,
+   "feature": "02 Dashboard",
+   "name": "Activities tab",
+   "url": "/index.php?m=activity",
+   "title": "OpenCATS - Activities",
+   "ms": 69,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 65,
+    "load": 67
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "07-02-dashboard-activities-tab.png"
+  },
+  {
+   "n": 8,
+   "feature": "02 Dashboard",
+   "name": "Lists tab",
+   "url": "/index.php?m=lists",
+   "title": "OpenCATS - Lists",
+   "ms": 52,
+   "timing": {
+    "ttfb": 22,
+    "dcl": 44,
+    "load": 51
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "08-02-dashboard-lists-tab.png"
+  },
+  {
+   "n": 9,
+   "feature": "06 Companies",
+   "name": "companies list",
+   "url": "/index.php?m=companies",
+   "title": "OpenCATS - Companies",
+   "ms": 69,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 57,
+    "load": 67
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "09-06-companies-companies-list.png"
+  },
+  {
+   "n": 10,
+   "feature": "06 Companies",
+   "name": "add company (form submit)",
+   "url": "/index.php?m=companies&a=show&companyID=2",
+   "title": "OpenCATS - Company - Baseline Test Co (TEST)",
+   "ms": 247,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 71,
+    "load": 82
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "companyID=2"
+   ],
+   "php": [
+    "Warning: count(): Parameter must be an array or an object that implements Countable in modules/companies/Show.tpl:311",
+    "Warning: count(): Parameter must be an array or an object that implements Countable in modules/companies/Show.tpl:349",
+    "Warning: count(): Parameter must be an array or an object that implements Countable in modules/companies/Show.tpl:393"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "10-06-companies-add-company-form-submit.png"
+  },
+  {
+   "n": 11,
+   "feature": "06 Companies",
+   "name": "company detail",
+   "url": "/index.php?m=companies&a=show&companyID=2",
+   "title": "OpenCATS - Company - Baseline Test Co (TEST)",
+   "ms": 60,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 46,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [
+    "Warning: count(): Parameter must be an array or an object that implements Countable in modules/companies/Show.tpl:311",
+    "Warning: count(): Parameter must be an array or an object that implements Countable in modules/companies/Show.tpl:349",
+    "Warning: count(): Parameter must be an array or an object that implements Countable in modules/companies/Show.tpl:393"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "11-06-companies-company-detail.png"
+  },
+  {
+   "n": 12,
+   "feature": "06 Companies",
+   "name": "edit company page",
+   "url": "/index.php?m=companies&a=edit&companyID=2",
+   "title": "OpenCATS - Companies",
+   "ms": 79,
+   "timing": {
+    "ttfb": 25,
+    "dcl": 48,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "12-06-companies-edit-company-page.png"
+  },
+  {
+   "n": 13,
+   "feature": "07 Contacts",
+   "name": "contacts list",
+   "url": "/index.php?m=contacts",
+   "title": "OpenCATS - Contacts",
+   "ms": 60,
+   "timing": {
+    "ttfb": 25,
+    "dcl": 49,
+    "load": 58
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "13-07-contacts-contacts-list.png"
+  },
+  {
+   "n": 14,
+   "feature": "07 Contacts",
+   "name": "add contact with company autocomplete",
+   "url": "/index.php?m=contacts&a=show&contactID=1",
+   "title": "OpenCATS - Contact - Casey Contact-Test",
+   "ms": 5111,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 85,
+    "load": 92
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "autocomplete: clicked; #companyID=2",
+    "contactID=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "14-07-contacts-add-contact-with-company-autocomplete.png"
+  },
+  {
+   "n": 15,
+   "feature": "07 Contacts",
+   "name": "contact detail",
+   "url": "/index.php?m=contacts&a=show&contactID=1",
+   "title": "OpenCATS - Contact - Casey Contact-Test",
+   "ms": 61,
+   "timing": {
+    "ttfb": 25,
+    "dcl": 48,
+    "load": 52
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "15-07-contacts-contact-detail.png"
+  },
+  {
+   "n": 16,
+   "feature": "07 Contacts",
+   "name": "cold call list",
+   "url": "/index.php?m=contacts&a=showColdCallList",
+   "title": "OpenCATS - Contacts",
+   "ms": 50,
+   "timing": {
+    "ttfb": 23,
+    "dcl": 42,
+    "load": 49
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "16-07-contacts-cold-call-list.png"
+  },
+  {
+   "n": 17,
+   "feature": "05 Jobs",
+   "name": "job orders list",
+   "url": "/index.php?m=joborders",
+   "title": "OpenCATS - Job Orders",
+   "ms": 79,
+   "timing": {
+    "ttfb": 33,
+    "dcl": 65,
+    "load": 76
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "17-05-jobs-job-orders-list.png"
+  },
+  {
+   "n": 18,
+   "feature": "05 Jobs",
+   "name": "Add Job Order popup",
+   "url": "/index.php?m=joborders",
+   "title": "OpenCATS - Job Orders",
+   "ms": 388,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 63,
+    "load": 77
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "popup text:  Job Orders: Add Job Order Add Job Order Empty Job Order Copy Existing Job Order "
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "18-05-jobs-add-job-order-popup.png"
+  },
+  {
+   "n": 19,
+   "feature": "05 Jobs",
+   "name": "add job order (public)",
+   "url": "/index.php?m=joborders&a=show&jobOrderID=1",
+   "title": "OpenCATS - Job Order - Baseline QA Engineer (TEST)",
+   "ms": 5321,
+   "timing": {
+    "ttfb": 31,
+    "dcl": 91,
+    "load": 122
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "autocomplete: clicked; #companyID=2",
+    "public checked",
+    "description via textarea",
+    "jobOrderID=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [
+    "[error] [CKEDITOR]: The license key is missing or invalid.\n\nIf you suddenly started to see this message, this may mean you accidentally updated CKEditor 4 to the LTS version (4.23.0 and above). This version of the editor is under commercial terms and requires acquiring an \"Extended Support Model\" contract - @ http://localhost:8080/vendor/ckeditor/ckeditor/ckeditor.js?v=907:348"
+   ],
+   "pageErrors": [],
+   "failed": [
+    "GET http://localhost:8080/vendor/ckeditor/ckeditor/contents.css?t=P159 :: net::ERR_ABORTED"
+   ],
+   "http": [],
+   "dialogs": [],
+   "shot": "19-05-jobs-add-job-order-public.png"
+  },
+  {
+   "n": 20,
+   "feature": "05 Jobs",
+   "name": "job order detail",
+   "url": "/index.php?m=joborders&a=show&jobOrderID=1",
+   "title": "OpenCATS - Job Order - Baseline QA Engineer (TEST)",
+   "ms": 81,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 58,
+    "load": 77
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "20-05-jobs-job-order-detail.png"
+  },
+  {
+   "n": 21,
+   "feature": "03 Candidates",
+   "name": "candidates list (before add)",
+   "url": "/index.php?m=candidates",
+   "title": "OpenCATS - Candidates",
+   "ms": 69,
+   "timing": {
+    "ttfb": 33,
+    "dcl": 58,
+    "load": 68
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "21-03-candidates-candidates-list-before-add.png"
+  },
+  {
+   "n": 22,
+   "feature": "14 Resume",
+   "name": "add-candidate: upload resume text file for parsing",
+   "url": "/index.php?m=candidates&a=add",
+   "title": "OpenCATS - Candidates",
+   "ms": 233,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 71,
+    "load": 77
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "Upload button disabled after choosing file: false",
+    "documentText length after upload: 186 (contains resume keyword)"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "22-14-resume-add-candidate-upload-resume-text-file-for-parsing.png"
+  },
+  {
+   "n": 23,
+   "feature": "03 Candidates",
+   "name": "add candidate (form submit)",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 196,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 80,
+    "load": 90
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "candidateID=2"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "23-03-candidates-add-candidate-form-submit.png"
+  },
+  {
+   "n": 24,
+   "feature": "03 Candidates",
+   "name": "add duplicate candidate (same name/email)",
+   "url": "/index.php?m=candidates&a=show&candidateID=3",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 240,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 92,
+    "load": 103
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "duplicateCandidateID=3; duplicate notice: yes"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "24-03-candidates-add-duplicate-candidate-same-name-email.png"
+  },
+  {
+   "n": 25,
+   "feature": "03 Candidates",
+   "name": "candidates list (after add)",
+   "url": "/index.php?m=candidates",
+   "title": "OpenCATS - Candidates",
+   "ms": 72,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 58,
+    "load": 68
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "25-03-candidates-candidates-list-after-add.png"
+  },
+  {
+   "n": 26,
+   "feature": "04 Candidate detail",
+   "name": "candidate detail page",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 66,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 54,
+    "load": 61
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "26-04-candidate-detail-candidate-detail-page.png"
+  },
+  {
+   "n": 27,
+   "feature": "14 Resume",
+   "name": "upload PDF attachment via popup",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 3087,
+   "timing": {
+    "ttfb": 34,
+    "dcl": 59,
+    "load": 65
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "popup after submit: The file has been successfully attached, but OpenCATS was unable to index the resume keywords to make the document searchable. The file format may be unsupporte"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "27-14-resume-upload-pdf-attachment-via-popup.png"
+  },
+  {
+   "n": 28,
+   "feature": "14 Resume",
+   "name": "upload DOCX attachment via popup",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 2958,
+   "timing": {
+    "ttfb": 31,
+    "dcl": 60,
+    "load": 66
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "28-14-resume-upload-docx-attachment-via-popup.png"
+  },
+  {
+   "n": 29,
+   "feature": "14 Resume",
+   "name": "download attachments (integrity check)",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 73,
+   "timing": {
+    "ttfb": 31,
+    "dcl": 60,
+    "load": 66
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "attachment links: 3",
+    "GET /index.php?m=attachments&a=getAttachment&id=1&directoryNameHash=a2c53949e4c29e9277c8b21736 -> 200 text/plain;charset=UTF-8 187B disp=inline; filename=\"resume_alex.txt\"",
+    "GET /index.php?m=attachments&a=getAttachment&id=2&directoryNameHash=755ea2809aa4442225a8ca5868 -> 200 application/pdf 674B disp=inline; filename=\"portfolio_alex.pdf\"",
+    "GET /index.php?m=attachments&a=getAttachment&id=3&directoryNameHash=600d784796b717a1b5b3a24f5e -> 200 application/octet-stream 1359B disp=inline; filename=\"cover_alex.docx\"",
+    "expected sizes: {\"portfolio_alex.pdf\":674,\"cover_alex.docx\":1359}"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "29-14-resume-download-attachments-integrity-check.png"
+  },
+  {
+   "n": 30,
+   "feature": "04 Candidate detail",
+   "name": "add candidate to job pipeline (popup search)",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 4117,
+   "timing": {
+    "ttfb": 32,
+    "dcl": 61,
+    "load": 70
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "search results: Search for a job order below, and then click on the job title to add the candidate to the selected job order. Search by Job Title: * Search by Company Name: * S"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "30-04-candidate-detail-add-candidate-to-job-pipeline-popup-sear.png"
+  },
+  {
+   "n": 31,
+   "feature": "15 Email",
+   "name": "pipeline status change + activity (may trigger candidate e-mail)",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 4363,
+   "timing": {
+    "ttfb": 35,
+    "dcl": 62,
+    "load": 71
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "status options: -1=(Select a Status), 100=No Contact, 200=Contacted, 250=Candidate Responded, 300=Qualifying, 400=Submitted, 500=Interviewing, 600=Offered, 650=Not in Consideration, 700=Client Declined, 800=Placed",
+    "triggerEmail checkbox present, checked=false",
+    "popup after save: The candidate's status has been changed from No Contact to Contacted. An activity entry of type Call has been added with the following note: \"Baseline smoke-test activity note (TEST)\". No event has been scheduled. No e-m"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "31-15-email-pipeline-status-change-activity-may-trigger-candida.png"
+  },
+  {
+   "n": 32,
+   "feature": "04 Candidate detail",
+   "name": "candidate detail after pipeline/activity",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 65,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 54,
+    "load": 62
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "32-04-candidate-detail-candidate-detail-after-pipeline-activity.png"
+  },
+  {
+   "n": 33,
+   "feature": "04 Candidate detail",
+   "name": "edit candidate + save",
+   "url": "/index.php?m=candidates&a=show&candidateID=2",
+   "title": "OpenCATS - Candidate - Alex Baseline-Test",
+   "ms": 222,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 83,
+    "load": 91
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "33-04-candidate-detail-edit-candidate-save.png"
+  },
+  {
+   "n": 34,
+   "feature": "14 Resume",
+   "name": "view resume text page",
+   "url": "/index.php?m=candidates&a=viewResume&attachmentID=1",
+   "title": "Candidates - Preview Alex Baseline-Test",
+   "ms": 109,
+   "timing": {
+    "ttfb": 25,
+    "dcl": 34,
+    "load": 34
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "viewResume link: # window.open('index.php?m=candidates&a=viewResume&attachmentID=1', 'viewResume', 'scrollbars=1,width=800,height=760')",
+    "text: Alex Baseline-Test (FICTIONAL TEST DATA) alex.baseline@example.test | 555-0101 | Testville, TS Summary: QA engineer. Uni"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "34-14-resume-view-resume-text-page.png"
+  },
+  {
+   "n": 35,
+   "feature": "08 Calendar",
+   "name": "calendar month view",
+   "url": "/index.php?m=calendar",
+   "title": "OpenCATS - Calendar",
+   "ms": 77,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 74,
+    "load": 76
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "35-08-calendar-calendar-month-view.png"
+  },
+  {
+   "n": 36,
+   "feature": "08 Calendar",
+   "name": "add calendar event",
+   "url": "/index.php?m=calendar&view=MONTHVIEW&month=9&year=2026&week=-1&day=-1&showEvent=1",
+   "title": "OpenCATS - Calendar",
+   "ms": 1105,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 84,
+    "load": 90
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "event types: =(Select a Type), 100=Call, 200=Email, 300=Meeting, 400=Interview, 500=Personal, 600=Other"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "36-08-calendar-add-calendar-event.png"
+  },
+  {
+   "n": 37,
+   "feature": "08 Calendar",
+   "name": "upcoming events",
+   "url": "/index.php?m=calendar&view=MONTHVIEW&month=9&year=2026&week=-1&day=-1&showEvent=1",
+   "title": "OpenCATS - Calendar",
+   "ms": 1002,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 84,
+    "load": 90
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "37-08-calendar-upcoming-events.png"
+  },
+  {
+   "n": 38,
+   "feature": "09 Search",
+   "name": "quick search (header)",
+   "url": "/index.php?m=home&a=quickSearch&quickSearchFor=Baseline&quickSearch=Go",
+   "title": "OpenCATS - Quick Search",
+   "ms": 175,
+   "timing": {
+    "ttfb": 23,
+    "dcl": 45,
+    "load": 55
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "result links outside Recent bar: {\"candidateID=2\":2,\"companyID=2\":3,\"contactID=1\":2,\"jobOrderID=1\":1}"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "38-09-search-quick-search-header.png"
+  },
+  {
+   "n": 39,
+   "feature": "09 Search",
+   "name": "candidate search by name",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByFullName&wildCardString=Alex+Baseline-Test&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 149,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 48,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"Alex Baseline-Test\" result links to candidateID=2 (outside Recent bar): 2; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "39-09-search-candidate-search-by-name.png"
+  },
+  {
+   "n": 40,
+   "feature": "09 Search",
+   "name": "candidate search by key skills",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByKeySkills&wildCardString=playwright&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 163,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 47,
+    "load": 53
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"playwright\" result links to candidateID=2 (outside Recent bar): 2; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "40-09-search-candidate-search-by-key-skills.png"
+  },
+  {
+   "n": 41,
+   "feature": "09 Search",
+   "name": "candidate search by city",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByCity&wildCardString=Testville&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 149,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 48,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"Testville\" result links to candidateID=2 (outside Recent bar): 2; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "41-09-search-candidate-search-by-city.png"
+  },
+  {
+   "n": 42,
+   "feature": "14 Resume",
+   "name": "resume keyword search: TXT resume (Zyxwvutronics)",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByResume&wildCardString=Zyxwvutronics&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 168,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 51,
+    "load": 56
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"Zyxwvutronics\" result links to candidateID=2 (outside Recent bar): 2; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "42-14-resume-resume-keyword-search-txt-resume-zyxwvutronics.png"
+  },
+  {
+   "n": 43,
+   "feature": "14 Resume",
+   "name": "resume keyword search: PDF attachment (Quokkaflux)",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByResume&wildCardString=Quokkaflux&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 156,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 54,
+    "load": 59
+   },
+   "outcome": "FAIL",
+   "error": null,
+   "notes": [
+    "term=\"Quokkaflux\" result links to candidateID=2 (outside Recent bar): 0; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "43-14-resume-resume-keyword-search-pdf-attachment-quokkaflux.png"
+  },
+  {
+   "n": 44,
+   "feature": "14 Resume",
+   "name": "resume keyword search: DOCX attachment (Pangolinware)",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByResume&wildCardString=Pangolinware&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 180,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 58,
+    "load": 68
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"Pangolinware\" result links to candidateID=2 (outside Recent bar): 2; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "44-14-resume-resume-keyword-search-docx-attachment-pangolinware.png"
+  },
+  {
+   "n": 45,
+   "feature": "14 Resume",
+   "name": "resume keyword search: negative control (term not in any document)",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByResume&wildCardString=Nonexistentkeywordqq&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 182,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 51,
+    "load": 56
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"Nonexistentkeywordqq\" result links to candidateID=2 (outside Recent bar): 0; expected none"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "45-14-resume-resume-keyword-search-negative-control-term-not-in.png"
+  },
+  {
+   "n": 46,
+   "feature": "09 Search",
+   "name": "job order search",
+   "url": "/index.php?m=joborders&a=search&getback=getback&mode=searchByJobTitle&wildCardString=QA+Engineer&searchJobOrders=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Job Orders",
+   "ms": 158,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 56,
+    "load": 60
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"QA Engineer\" result links to jobOrderID=1 (outside Recent bar): 1; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "46-09-search-job-order-search.png"
+  },
+  {
+   "n": 47,
+   "feature": "09 Search",
+   "name": "company search",
+   "url": "/index.php?m=companies&a=search&getback=getback&mode=searchByName&wildCardString=Baseline&searchCompanies=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Companies",
+   "ms": 151,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 49,
+    "load": 56
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"Baseline\" result links to companyID=2 (outside Recent bar): 1; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "47-09-search-company-search.png"
+  },
+  {
+   "n": 48,
+   "feature": "09 Search",
+   "name": "contact search",
+   "url": "/index.php?m=contacts&a=search&getback=getback&mode=searchByFullName&wildCardString=Contact-Test&searchContacts=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Contacts",
+   "ms": 149,
+   "timing": {
+    "ttfb": 24,
+    "dcl": 47,
+    "load": 53
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "term=\"Contact-Test\" result links to contactID=1 (outside Recent bar): 2; expected >=1"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "48-09-search-contact-search.png"
+  },
+  {
+   "n": 49,
+   "feature": "10 Reports",
+   "name": "reports tab",
+   "url": "/index.php?m=reports",
+   "title": "OpenCATS - Reports",
+   "ms": 64,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 55,
+    "load": 62
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "49-10-reports-reports-tab.png"
+  },
+  {
+   "n": 50,
+   "feature": "10 Reports",
+   "name": "submission report (to date)",
+   "url": "/index.php?m=reports&a=showSubmissionReport&period=toDate",
+   "title": "OpenCATS - To Date Report",
+   "ms": 45,
+   "timing": {
+    "ttfb": 18,
+    "dcl": 39,
+    "load": 44
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "50-10-reports-submission-report-to-date.png"
+  },
+  {
+   "n": 51,
+   "feature": "10 Reports",
+   "name": "placement report (to date)",
+   "url": "/index.php?m=reports&a=showPlacementReport&period=toDate",
+   "title": "OpenCATS - To Date Report",
+   "ms": 44,
+   "timing": {
+    "ttfb": 18,
+    "dcl": 37,
+    "load": 43
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "51-10-reports-placement-report-to-date.png"
+  },
+  {
+   "n": 52,
+   "feature": "10 Reports",
+   "name": "EEO report customize + preview",
+   "url": "/index.php?m=reports&a=generateEEOReportPreview&period=all&status=all&submit=Preview+Report",
+   "title": "OpenCATS - EEO Reports",
+   "ms": 1149,
+   "timing": {
+    "ttfb": 20,
+    "dcl": 41,
+    "load": 46
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "preview url: /index.php?m=reports&a=generateEEOReportPreview&period=all&status=all&submit=Preview+Report"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [
+    "Cannot read properties of undefined (reading 'focus')",
+    "Cannot read properties of undefined (reading 'focus')"
+   ],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "52-10-reports-eeo-report-customize-preview.png"
+  },
+  {
+   "n": 53,
+   "feature": "10 Reports",
+   "name": "job order report customize page",
+   "url": "/index.php?m=reports&a=customizeJobOrderReport&jobOrderID=1",
+   "title": "OpenCATS - Job Orders",
+   "ms": 52,
+   "timing": {
+    "ttfb": 22,
+    "dcl": 46,
+    "load": 50
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "53-10-reports-job-order-report-customize-page.png"
+  },
+  {
+   "n": 54,
+   "feature": "10 Reports",
+   "name": "job order report PDF generation",
+   "url": "/index.php?m=reports&a=customizeJobOrderReport&jobOrderID=1",
+   "title": "OpenCATS - Job Orders",
+   "ms": 31,
+   "timing": {
+    "ttfb": 22,
+    "dcl": 46,
+    "load": 50
+   },
+   "outcome": "FAIL",
+   "error": null,
+   "notes": [
+    "form fields: m,a,siteName,companyName,jobOrderName,periodLine,accountManager,recruiter,dataSet,dataSet1,dataSet2,dataSet3,dataSet4,notes,ext,submit",
+    "POST -> 200 text/html; charset=UTF-8 374B starts=\"<br />\\n<\""
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": null
+  },
+  {
+   "n": 55,
+   "feature": "10 Reports",
+   "name": "job order pipeline graph image",
+   "url": "/index.php?m=reports&a=customizeJobOrderReport&jobOrderID=1",
+   "title": "OpenCATS - Job Orders",
+   "ms": 43,
+   "timing": {
+    "ttfb": 22,
+    "dcl": 46,
+    "load": 50
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "graph -> 200 image/jpeg 27248B"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": null
+  },
+  {
+   "n": 56,
+   "feature": "11 Settings",
+   "name": "my profile",
+   "url": "/index.php?m=settings",
+   "title": "OpenCATS - Settings",
+   "ms": 58,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 47,
+    "load": 56
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "56-11-settings-my-profile.png"
+  },
+  {
+   "n": 57,
+   "feature": "11 Settings",
+   "name": "administration",
+   "url": "/index.php?m=settings&a=administration",
+   "title": "OpenCATS - Settings",
+   "ms": 57,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 51,
+    "load": 55
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "57-11-settings-administration.png"
+  },
+  {
+   "n": 58,
+   "feature": "11 Settings",
+   "name": "change password page",
+   "url": "/index.php?m=settings&a=myProfile&s=changePassword",
+   "title": "OpenCATS - Settings",
+   "ms": 55,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 48,
+    "load": 53
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "58-11-settings-change-password-page.png"
+  },
+  {
+   "n": 59,
+   "feature": "11 Settings",
+   "name": "site details",
+   "url": "/index.php?m=settings&a=administration&s=siteName",
+   "title": "OpenCATS - Settings",
+   "ms": 51,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 45,
+    "load": 50
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "59-11-settings-site-details.png"
+  },
+  {
+   "n": 60,
+   "feature": "11 Settings",
+   "name": "user management",
+   "url": "/index.php?m=settings&a=manageUsers",
+   "title": "OpenCATS - Settings",
+   "ms": 60,
+   "timing": {
+    "ttfb": 32,
+    "dcl": 53,
+    "load": 59
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "60-11-settings-user-management.png"
+  },
+  {
+   "n": 61,
+   "feature": "11 Settings",
+   "name": "add user page",
+   "url": "/index.php?m=settings&a=addUser",
+   "title": "OpenCATS - Settings",
+   "ms": 55,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 50,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "61-11-settings-add-user-page.png"
+  },
+  {
+   "n": 62,
+   "feature": "11 Settings",
+   "name": "login activity",
+   "url": "/index.php?m=settings&a=loginActivity",
+   "title": "OpenCATS - Settings",
+   "ms": 68,
+   "timing": {
+    "ttfb": 31,
+    "dcl": 52,
+    "load": 58
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "62-11-settings-login-activity.png"
+  },
+  {
+   "n": 63,
+   "feature": "11 Settings",
+   "name": "e-mail templates",
+   "url": "/index.php?m=settings&a=emailTemplates",
+   "title": "OpenCATS - Settings",
+   "ms": 62,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 53,
+    "load": 60
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "63-11-settings-e-mail-templates.png"
+  },
+  {
+   "n": 64,
+   "feature": "11 Settings",
+   "name": "localization",
+   "url": "/index.php?m=settings&a=administration&s=localization",
+   "title": "OpenCATS - Settings",
+   "ms": 56,
+   "timing": {
+    "ttfb": 26,
+    "dcl": 49,
+    "load": 55
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "64-11-settings-localization.png"
+  },
+  {
+   "n": 65,
+   "feature": "11 Settings",
+   "name": "site backup page",
+   "url": "/index.php?m=settings&a=createBackup",
+   "title": "OpenCATS - Settings",
+   "ms": 55,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 49,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "65-11-settings-site-backup-page.png"
+  },
+  {
+   "n": 66,
+   "feature": "11 Settings",
+   "name": "EEO settings",
+   "url": "/index.php?m=settings&a=eeo",
+   "title": "OpenCATS - Settings",
+   "ms": 63,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 56,
+    "load": 62
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "66-11-settings-eeo-settings.png"
+  },
+  {
+   "n": 67,
+   "feature": "11 Settings",
+   "name": "tags",
+   "url": "/index.php?m=settings&a=tags",
+   "title": "OpenCATS - Settings",
+   "ms": 58,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 52,
+    "load": 56
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "67-11-settings-tags.png"
+  },
+  {
+   "n": 68,
+   "feature": "11 Settings",
+   "name": "customize calendar",
+   "url": "/index.php?m=settings&a=customizeCalendar",
+   "title": "OpenCATS - Settings",
+   "ms": 56,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 49,
+    "load": 53
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "68-11-settings-customize-calendar.png"
+  },
+  {
+   "n": 69,
+   "feature": "11 Settings",
+   "name": "extra fields",
+   "url": "/index.php?m=settings&a=customizeExtraFields",
+   "title": "OpenCATS - Settings",
+   "ms": 58,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 51,
+    "load": 57
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "69-11-settings-extra-fields.png"
+  },
+  {
+   "n": 70,
+   "feature": "11 Settings",
+   "name": "passwords",
+   "url": "/index.php?m=settings&a=administration&s=passwords",
+   "title": "OpenCATS - Settings",
+   "ms": 55,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 49,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "70-11-settings-passwords.png"
+  },
+  {
+   "n": 71,
+   "feature": "11 Settings",
+   "name": "new version check page",
+   "url": "/index.php?m=settings&a=administration&s=newVersionCheck",
+   "title": "OpenCATS - Settings",
+   "ms": 70,
+   "timing": {
+    "ttfb": 41,
+    "dcl": 62,
+    "load": 67
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "71-11-settings-new-version-check-page.png"
+  },
+  {
+   "n": 72,
+   "feature": "11 Settings",
+   "name": "system information",
+   "url": "/index.php?m=settings&a=administration&s=systemInformation",
+   "title": "OpenCATS - Settings",
+   "ms": 54,
+   "timing": {
+    "ttfb": 27,
+    "dcl": 47,
+    "load": 52
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "72-11-settings-system-information.png"
+  },
+  {
+   "n": 73,
+   "feature": "11 Settings",
+   "name": "data import page",
+   "url": "/index.php?m=import",
+   "title": "OpenCATS - Import",
+   "ms": 57,
+   "timing": {
+    "ttfb": 25,
+    "dcl": 45,
+    "load": 54
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "73-11-settings-data-import-page.png"
+  },
+  {
+   "n": 74,
+   "feature": "11 Settings",
+   "name": "add user (test recruiter)",
+   "url": "/index.php?m=settings&a=showUser&userID=1251",
+   "title": "OpenCATS - Settings",
+   "ms": 275,
+   "timing": {
+    "ttfb": 32,
+    "dcl": 84,
+    "load": 92
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "fields: m,a,quickSearchFor,quickSearch,postback,role,firstName,lastName,email,username,password,retypePassword,accessLevel,accessLevel,accessLevel,accessLevel,accessLevel,accessLevel,submit,reset,back",
+    "after submit url: /index.php?m=settings&a=showUser&userID=1251 text:  OpenCATS.org Logout CATS Administrator <admin> (testdomain.com) Administrator Dashboard Activities Job Orders Candidates Companies Contacts Lists Calendar Repo"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "74-11-settings-add-user-test-recruiter.png"
+  },
+  {
+   "n": 75,
+   "feature": "12 Careers portal",
+   "name": "enable careers website (Settings)",
+   "url": "/index.php?m=settings&a=careerPortalSettings",
+   "title": "OpenCATS - Settings",
+   "ms": 1973,
+   "timing": {
+    "ttfb": 29,
+    "dcl": 63,
+    "load": 86
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "enabled before: false",
+    "enabled after reload: true"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "75-12-careers-portal-enable-careers-website-settings.png"
+  },
+  {
+   "n": 76,
+   "feature": "15 Email",
+   "name": "e-mail settings page",
+   "url": "/index.php?m=settings&a=emailSettings",
+   "title": "OpenCATS - Settings",
+   "ms": 66,
+   "timing": {
+    "ttfb": 33,
+    "dcl": 57,
+    "load": 61
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "76-15-email-e-mail-settings-page.png"
+  },
+  {
+   "n": 77,
+   "feature": "15 Email",
+   "name": "send test e-mail from settings (no SMTP server present)",
+   "url": "/index.php?m=settings&a=emailSettings",
+   "title": "OpenCATS - Settings",
+   "ms": 8060,
+   "timing": {
+    "ttfb": 33,
+    "dcl": 57,
+    "load": 61
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "testOutput:  An error occurred. Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php(2019): PH"
+   ],
+   "php": [
+    "Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/ in vendor/phpmailer/phpmailer/src/PHPMailer.php:2233"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "77-15-email-send-test-e-mail-from-settings-no-smtp-server-prese.png"
+  },
+  {
+   "n": 78,
+   "feature": "15 Email",
+   "name": "e-mail candidate from list (compose)",
+   "url": "/index.php?m=candidates&a=emailCandidates&i=candidates%3AcandidatesListByViewDataGrid&p=a%3A7%3A%7Bs%3A10%3A%22rangeStart%22%3Bi%3A0%3Bs%3A10%3A%22maxResults%22%3Bi%3A100000000%3Bs%3A13%3A%22filterVisible%22%3Bb%3A0%3Bs%3A6%3A%22sortBy%22%3Bs%3A16%3A%22dateModifiedSort%22%3Bs%3A13%3A%22sortDirection%22%3Bs%3A4%3A%22DESC%22%3Bs%3A9%3A%22exportIDs%22%3Bs%3A9%3A%22%3Cdynamic%3E%22%3Bs%3A16%3A%22noSaveParameters%22%3Bb%3A1%3B%7D&dynamicArgument0279d9da627056b26e6990f8bd470fbf=a%3A1%3A%7Bi%3A0%3Bs%3A1%3A%222%22%3B%7D",
+   "title": "OpenCATS - Candidates",
+   "ms": 1598,
+   "timing": {
+    "ttfb": 30,
+    "dcl": 78,
+    "load": 127
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "ui: clicked"
+   ],
+   "php": [
+    "Warning: Invalid argument supplied for foreach() in lib/DataGrid.php:248"
+   ],
+   "brokenImages": [],
+   "console": [
+    "[error] [CKEDITOR]: The license key is missing or invalid.\n\nIf you suddenly started to see this message, this may mean you accidentally updated CKEditor 4 to the LTS version (4.23.0 and above). This version of the editor is under commercial terms and requires acquiring an \"Extended Support Model\" contract - @ http://localhost:8080/vendor/ckeditor/ckeditor/ckeditor.js?v=907:348"
+   ],
+   "pageErrors": [],
+   "failed": [
+    "GET http://localhost:8080/vendor/ckeditor/ckeditor/contents.css?t=P159 :: net::ERR_ABORTED"
+   ],
+   "http": [],
+   "dialogs": [],
+   "shot": "78-15-email-e-mail-candidate-from-list-compose.png"
+  },
+  {
+   "n": 79,
+   "feature": "15 Email",
+   "name": "e-mail candidate send",
+   "url": "/index.php?m=candidates&a=emailCandidates",
+   "title": "",
+   "ms": 1621,
+   "timing": {
+    "ttfb": 31,
+    "dcl": 40,
+    "load": 41
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "result:  Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/phpmai"
+   ],
+   "php": [
+    "Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/ in vendor/phpmailer/phpmailer/src/PHPMailer.php:2233"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "79-15-email-e-mail-candidate-send.png"
+  },
+  {
+   "n": 80,
+   "feature": "12 Careers portal",
+   "name": "careers home",
+   "url": "/careers/index.php",
+   "title": "testdomain.com - Careers",
+   "ms": 50,
+   "timing": {
+    "ttfb": 25,
+    "dcl": 37,
+    "load": 48
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "80-12-careers-portal-careers-home.png"
+  },
+  {
+   "n": 81,
+   "feature": "12 Careers portal",
+   "name": "careers: list all jobs",
+   "url": "/careers/index.php?p=showAll",
+   "title": "testdomain.com - Careers",
+   "ms": 41,
+   "timing": {
+    "ttfb": 24,
+    "dcl": 36,
+    "load": 37
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "job listed: true"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "81-12-careers-portal-careers-list-all-jobs.png"
+  },
+  {
+   "n": 82,
+   "feature": "12 Careers portal",
+   "name": "careers: job detail",
+   "url": "/careers/index.php?p=showJob&ID=1",
+   "title": "testdomain.com - Careers",
+   "ms": 52,
+   "timing": {
+    "ttfb": 33,
+    "dcl": 46,
+    "load": 46
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "82-12-careers-portal-careers-job-detail.png"
+  },
+  {
+   "n": 83,
+   "feature": "12 Careers portal",
+   "name": "careers: search page",
+   "url": "/careers/index.php?p=search",
+   "title": "testdomain.com - Careers",
+   "ms": 37,
+   "timing": {
+    "ttfb": 23,
+    "dcl": 34,
+    "load": 35
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "83-12-careers-portal-careers-search-page.png"
+  },
+  {
+   "n": 84,
+   "feature": "13 Candidate application",
+   "name": "apply form",
+   "url": "/careers/index.php?m=careers&p=applyToJob&ID=1",
+   "title": "testdomain.com - Careers",
+   "ms": 160,
+   "timing": {
+    "ttfb": 25,
+    "dcl": 37,
+    "load": 37
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "apply link: index.php?m=careers&p=applyToJob&ID=1",
+    "fields: ID:hidden,candidateID:hidden,applyToJobSubAction:hidden,file:hidden,resumeFile:file,resumeLoad:button,resumeContents:textarea,firstName:text,lastName:text,email:text,emailconfirm:text,phoneHome:text,phoneCell:text,phone:text,bestTimeToCall:text,address:textarea,city:text,state:text,zip:text,keySkills:text"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "84-13-candidate-application-apply-form.png"
+  },
+  {
+   "n": 85,
+   "feature": "13 Candidate application",
+   "name": "apply: file chosen, Upload NOT clicked, submit",
+   "url": "/careers/index.php?m=careers&p=onApplyToJobOrder",
+   "title": "",
+   "ms": 2274,
+   "timing": {
+    "ttfb": 34,
+    "dcl": 44,
+    "load": 44
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "result page:  Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack"
+   ],
+   "php": [
+    "Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/ in vendor/phpmailer/phpmailer/src/PHPMailer.php:2233"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "85-13-candidate-application-apply-file-chosen-upload-not-clicke.png"
+  },
+  {
+   "n": 86,
+   "feature": "13 Candidate application",
+   "name": "apply: Choose File -> Upload -> submit (DOCX)",
+   "url": "/careers/index.php?m=careers&p=onApplyToJobOrder",
+   "title": "",
+   "ms": 2379,
+   "timing": {
+    "ttfb": 36,
+    "dcl": 45,
+    "load": 45
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "Upload button disabled after choosing file: false",
+    "resume textarea after Upload:  Morgan Applicant2-Test resume - FICTIONAL TEST DATA. morgan.applicant@example.test. Unique keyword: Axolotlex ",
+    "hidden file field after Upload: resume_morgan.docx",
+    "result page:  Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack"
+   ],
+   "php": [
+    "Fatal error: Uncaught PHPMailer\\PHPMailer\\Exception: SMTP Error: Could not connect to SMTP host. Failed to connect to server in /var/www/public/vendor/phpmailer/phpmailer/src/PHPMailer.php:2233 Stack trace: #0 /var/www/public/vendor/ in vendor/phpmailer/phpmailer/src/PHPMailer.php:2233"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "86-13-candidate-application-apply-choose-file-upload-submit-doc.png"
+  },
+  {
+   "n": 87,
+   "feature": "13 Candidate application",
+   "name": "applicants visible to recruiter (pipeline + attachments + resume search)",
+   "url": "/index.php?m=candidates&a=search&getback=getback&mode=searchByResume&wildCardString=Axolotlex&searchCandidates=Search&advancedSearchParser=&advancedSearchOn=0",
+   "title": "OpenCATS - Candidates",
+   "ms": 585,
+   "timing": {
+    "ttfb": 28,
+    "dcl": 64,
+    "load": 67
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "in job pipeline: Jordan=true Morgan=true",
+    "Applicant-Test (candidateID=4) attachments: []",
+    "Applicant2-Test (candidateID=5) attachments: [\"resume_morgan.docx\"]",
+    "resume keyword Axolotlex (inside uploaded DOCX) finds Morgan: true"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "87-13-candidate-application-applicants-visible-to-recruiter-pip.png"
+  },
+  {
+   "n": 88,
+   "feature": "12 Careers portal",
+   "name": "RSS job feed",
+   "url": "/rss/",
+   "title": "",
+   "ms": 13,
+   "timing": {
+    "ttfb": 1,
+    "dcl": 12,
+    "load": 12
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200 text/html; charset=UTF-8"
+   ],
+   "php": [
+    "Warning: Use of undefined constant LEGACY_ROOT - assumed 'LEGACY_ROOT' (this will throw an Error in a future version of PHP) in rss/index.php:37",
+    "Warning: include_once(LEGACY_ROOT/lib/CATSUtility.php): failed to open stream: No such file or directory in rss/index.php:37",
+    "Warning: include_once(): Failed opening 'LEGACY_ROOT/lib/CATSUtility.php' for inclusion (include_path='.:/usr/local/lib/php') in rss/index.php:37",
+    "Fatal error: Uncaught Error: Class 'CATSUtility' not found in /var/www/public/rss/index.php:38 Stack trace: #0 {main} thrown in rss/index.php:38",
+    "DB/Query/Uncaught error text on page (rss/)"
+   ],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "88-12-careers-portal-rss-job-feed.png"
+  },
+  {
+   "n": 89,
+   "feature": "12 Careers portal",
+   "name": "XML job feed",
+   "url": "/xml/",
+   "title": "",
+   "ms": 37,
+   "timing": {
+    "ttfb": 23,
+    "dcl": 34,
+    "load": 35
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "HTTP 200 text/xml;charset=UTF-8"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "89-12-careers-portal-xml-job-feed.png"
+  },
+  {
+   "n": 90,
+   "feature": "02 Dashboard",
+   "name": "home dashboard with test data",
+   "url": "/index.php?m=home",
+   "title": "OpenCATS - Home",
+   "ms": 81,
+   "timing": {
+    "ttfb": 32,
+    "dcl": 59,
+    "load": 80
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "90-02-dashboard-home-dashboard-with-test-data.png"
+  },
+  {
+   "n": 91,
+   "feature": "02 Dashboard",
+   "name": "Activities: all periods",
+   "url": "/index.php?m=activity&a=viewByDate&getback=getback&period=all",
+   "title": "OpenCATS - Activities",
+   "ms": 96,
+   "timing": {
+    "ttfb": 32,
+    "dcl": 75,
+    "load": 91
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "91-02-dashboard-activities-all-periods.png"
+  },
+  {
+   "n": 92,
+   "feature": "Layout",
+   "name": "candidates list at 390px width",
+   "url": "/index.php?m=candidates",
+   "title": "OpenCATS - Candidates",
+   "ms": 75,
+   "timing": {
+    "ttfb": 30,
+    "dcl": 58,
+    "load": 71
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "scrollWidth=978"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "92-layout-candidates-list-at-390px-width.png"
+  },
+  {
+   "n": 93,
+   "feature": "Layout",
+   "name": "careers job list at 390px width",
+   "url": "/careers/index.php?p=showAll",
+   "title": "testdomain.com - Careers",
+   "ms": 43,
+   "timing": {
+    "ttfb": 24,
+    "dcl": 38,
+    "load": 39
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [
+    "scrollWidth=940"
+   ],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "93-layout-careers-job-list-at-390px-width.png"
+  },
+  {
+   "n": 94,
+   "feature": "01 Login",
+   "name": "logout",
+   "url": "/index.php?m=login",
+   "title": "opencats - Login",
+   "ms": 125,
+   "timing": {
+    "ttfb": 69,
+    "dcl": 99,
+    "load": 105
+   },
+   "outcome": "PASS",
+   "error": null,
+   "notes": [],
+   "php": [],
+   "brokenImages": [],
+   "console": [],
+   "pageErrors": [],
+   "failed": [],
+   "http": [],
+   "dialogs": [],
+   "shot": "94-01-login-logout.png"
+  }
+ ]
+}
