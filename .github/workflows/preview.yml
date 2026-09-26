@@ -1,0 +1,116 @@
+# OpenCATS preview environment (environment-only; see docs/baseline/PREVIEW_ENVIRONMENT.md).
+#
+# Builds the application from the pushed commit, runs it with fictional demo data in an isolated
+# Docker network (no outbound access for the app), exposes it through a temporary Cloudflare HTTPS
+# tunnel, verifies it from outside through that public URL, publishes the result as the
+# "OpenCATS Preview" check run (URL + credentials encrypted), and keeps it online for a few hours.
+name: Preview environment
+
+on:
+  push:
+    branches: ['claude/**']
+    paths:
+      - '**'
+      - '!docs/**'
+      - 'docs/baseline/preview/**'
+      - 'docs/baseline/env/**'
+      - 'docs/baseline/PREVIEW_ENVIRONMENT.md'
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: 'Hours to keep the preview online (max 5.5)'
+        required: false
+        default: '5'
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true   # a newer commit replaces the running preview
+
+jobs:
+  preview:
+    name: Deploy, verify and serve preview
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      PREVIEW_PORT: '8090'
+      PREVIEW_GATEWAY_IMAGE: 'nginx:1.27-alpine'
+      PREVIEW_NODE_PATH: /tmp/pw/node_modules
+      # No COMPOSER_AUTH: the PHP 7.2 image's Composer 1.8.4 rejects current GitHub token formats.
+      # Two packages fit well within anonymous API limits, and Composer falls back to git clone.
+      HOURS: ${{ inputs.hours || '5' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install browser tooling (Playwright, axe-core)
+        run: |
+          npm install --no-save --no-audit --no-fund --prefix /tmp/pw playwright@1.56.1 axe-core@4.10.3
+          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Start preview (application + fictional demo data + HTTPS tunnel)
+        env:
+          PREVIEW_TUNNEL_TOKEN: ${{ secrets.PREVIEW_TUNNEL_TOKEN }}
+          PREVIEW_PUBLIC_URL: ${{ vars.PREVIEW_PUBLIC_URL }}
+        run: docs/baseline/preview/preview.sh up "$RUNNER_TEMP/preview" --tunnel
+
+      - name: Verify through the public URL
+        run: |
+          set -a; . "$RUNNER_TEMP/preview/secrets/credentials.env"; set +a
+          PREVIEW_URL=$(cat "$RUNNER_TEMP/preview/secrets/preview-url")
+          echo "::add-mask::$PREVIEW_URL"
+          echo "::add-mask::$PREVIEW_DEMO_PASSWORD"
+          echo "::add-mask::$PREVIEW_ADMIN_PASSWORD"
+          export PREVIEW_URL
+          for i in $(seq 1 36); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$PREVIEW_URL/index.php" || true)
+            [ "$code" = "200" ] && break; sleep 5
+          done
+          echo "public URL answers: HTTP $code"
+          NODE_PATH=/tmp/pw/node_modules node docs/baseline/preview/verify-preview.js "$RUNNER_TEMP/verify"
+
+      - name: Publish result (check run with encrypted access details)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          SECS=$(awk -v h="$HOURS" 'BEGIN { if (h+0 <= 0 || h+0 > 5.5) h = 5; printf "%d", h * 3600 }')
+          END_EPOCH=$(( $(date +%s) + SECS ))
+          EXPIRES=$(date -u -d "@$END_EPOCH" +%Y-%m-%dT%H:%MZ)
+          { echo "END_EPOCH=$END_EPOCH"; echo "EXPIRES=$EXPIRES"; } >> "$GITHUB_ENV"
+          docs/baseline/preview/publish-check.sh "$RUNNER_TEMP/preview" "$RUNNER_TEMP/verify" "$EXPIRES"
+
+      - name: Upload verification evidence (no secrets)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-verification-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/verify/
+            ${{ runner.temp }}/preview/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Keep the preview online
+        run: |
+          PREVIEW_URL=$(cat "$RUNNER_TEMP/preview/secrets/preview-url")
+          echo "::add-mask::$PREVIEW_URL"
+          fails=0
+          while [ "$(date +%s)" -lt "$END_EPOCH" ]; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$PREVIEW_URL/index.php" || true)
+            if [ "$code" = "200" ]; then fails=0; else fails=$((fails+1)); fi
+            echo "$(date -u +%H:%M) public health: HTTP $code"
+            [ "$fails" -ge 3 ] && { echo "preview unreachable 3 times in a row"; exit 1; }
+            sleep 300
+          done
+          echo "preview window ended ($EXPIRES)"
+
+      - name: Shut down
+        if: always()
+        run: docs/baseline/preview/preview.sh down "$RUNNER_TEMP/preview" || true
