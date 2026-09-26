@@ -266,7 +266,7 @@ Each item gives:
   - Optional capture of EEO data (gender, ethnicity, veteran status, disability), switched on per site.
   - The per-user permission to see EEO data.
   - The EEO report.
-- **Evidence it works:** **Runtime.** The report preview rendered in #52.
+- **Evidence it works:** **Runtime.** The EEO settings page loaded (#66) and the report preview rendered (#52).
 - **Why it matters:** US users need it for compliance.
 - **Do not carry over:**
   - The report and the full CSV export have no access check (SEC-022).
