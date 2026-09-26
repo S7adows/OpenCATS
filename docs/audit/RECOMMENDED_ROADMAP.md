@@ -1,5 +1,7 @@
 # OpenCATS Transformation — Recommended Roadmap
 
+> **Status (2026-09-26):** Phase 0 edition, not revised. This document is forward-looking and is outside the findings-only complete audit (see [README.md](README.md)). It will be revisited during the strategy work. Where it disagrees with the complete edition — for example on a severity — the complete edition wins.
+
 **Scope.** A phased plan from today's OpenCATS (`CATS_VERSION 0.9.7.4`, PHP 7.2-only, MyISAM, server-rendered PHP templates) to a modern, enterprise-grade ATS. Every Phase 1 item cites the audit finding that justifies it. Later phases are deliberately coarser; they must be re-planned with the architecture decisions (ADRs) taken in Phase 1.
 
 **Method.** Sequenced from `RISKS.md` (what must be contained first), `MODERNIZATION_OPPORTUNITIES.md` (target direction) and `PRODUCT_GAPS.md` (what the market needs). Durations and team sizes are **ASSUMPTIONS** (a team of ~4–6 engineers + product/design support); they are planning placeholders, not commitments.

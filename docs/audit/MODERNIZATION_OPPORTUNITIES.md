@@ -1,5 +1,7 @@
 # OpenCATS — Modernization Opportunities
 
+> **Status (2026-09-26):** Phase 0 edition, not revised. This document is forward-looking and is outside the findings-only complete audit (see [README.md](README.md)). It will be revisited during the strategy work. Where it disagrees with the complete edition — for example on a severity — the complete edition wins.
+
 **Scope.** Translates the audit findings into concrete modernization options: what to keep, redesign, replace or retire, and the target architecture direction. Each opportunity is tied to specific code in this repository. Sequencing and phase exit criteria are in `RECOMMENDED_ROADMAP.md`.
 
 **Method.** Derived from the domain audits (`ARCHITECTURE.md`, `DATABASE_AUDIT.md`, `SECURITY_AUDIT.md`, `API_AUDIT.md`, `UX_UI_AUDIT.md`, `PERFORMANCE_AUDIT.md`, `TESTING_AUDIT.md`, `DEPENDENCY_AUDIT.md`, `TECHNICAL_DEBT.md`, `FEATURE_INVENTORY.md`, `PRODUCT_GAPS.md`). Architecture options are evaluated against the facts of this code base; the final choice of backend framework is flagged as an ADR decision because it depends on team skills (UNKNOWN).

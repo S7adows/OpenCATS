@@ -1,5 +1,7 @@
 # OpenCATS — Product Gaps vs. a Modern Enterprise ATS
 
+> **Status (2026-09-26):** Phase 0 edition, not revised. This document is forward-looking and is outside the findings-only complete audit (see [README.md](README.md)). It will be revisited during the strategy work. Where it disagrees with the complete edition — for example on a severity — the complete edition wins.
+
 **Scope.** This document compares what OpenCATS (`CATS_VERSION 0.9.7.4`, `constants.php:45`) actually implements against the capabilities an enterprise buyer expects from an Applicant Tracking System in 2026. It is the product-level complement to `FEATURE_INVENTORY.md` (what exists) and is used by `RECOMMENDED_ROADMAP.md` to prioritise.
 
 **Method.**

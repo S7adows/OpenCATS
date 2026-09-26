@@ -1,5 +1,7 @@
 # OpenCATS — Risk Register
 
+> **Status (2026-09-26):** Phase 0 edition, not revised. This document is forward-looking and is outside the findings-only complete audit (see [README.md](README.md)). It will be revisited during the strategy work. Where it disagrees with the complete edition — for example on a severity — the complete edition wins.
+
 **Scope.** Consolidated register of (A) risks carried by the *current* system if it is operated as-is, and (B) risks to the *transformation programme* itself. Each risk links to the detailed finding(s) in the domain audits. This register is the input to sequencing decisions in `RECOMMENDED_ROADMAP.md`.
 
 **Method.** Synthesised from the domain audits in `docs/audit/` (ARCHITECTURE, DATABASE, SECURITY, API, UX_UI, PERFORMANCE, TESTING, DEPENDENCY, TECHNICAL_DEBT, FEATURE_INVENTORY). The highest-stakes claims were independently re-verified by the lead auditor against the code at commit `d607279` (see "Lead-auditor verification log" at the end). Likelihood is a qualitative judgement (**ASSUMPTION**) — High / Medium / Low — based on how reachable the defect is (e.g. unauthenticated vs. admin-only) and on deployment defaults.
